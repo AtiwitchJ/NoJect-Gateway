@@ -1,0 +1,41 @@
+version: "3.8"
+
+services:
+  guard-engine:
+    build:
+      context: ..
+      dockerfile: deployments/Dockerfile.guard
+    container_name: noject-guard-engine
+    restart: unless-stopped
+    ports:
+      - "50051:50051"
+    environment:
+      - PYTHONUNBUFFERED=1
+    networks:
+      - noject-net
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:50051/healthz')"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+
+  gateway:
+    build:
+      context: ..
+      dockerfile: deployments/Dockerfile.gateway
+    container_name: noject-gateway
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    volumes:
+      - ../configs/gateway.yaml:/app/configs/gateway.yaml:ro
+      - ../logs:/app/logs
+    depends_on:
+      guard-engine:
+        condition: service_healthy
+    networks:
+      - noject-net
+
+networks:
+  noject-net:
+    driver: bridge

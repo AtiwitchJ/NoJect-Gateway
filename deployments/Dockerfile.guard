@@ -1,0 +1,12 @@
+FROM python:3.11-slim
+
+WORKDIR /app
+
+COPY guard-engine/requirements.txt ./
+RUN pip install --no-cache-dir -r requirements.txt
+
+COPY guard-engine/ ./
+
+EXPOSE 50051
+
+CMD ["python", "-m", "uvicorn", "server:app", "--host", "0.0.0.0", "--port", "50051", "--workers", "4"]

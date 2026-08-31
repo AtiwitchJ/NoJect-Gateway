@@ -160,7 +160,33 @@ func (h *GatewayHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// 1. Route Matching
-	route, matched := h.table.Match(r.URL.Path)
+	targetPath := r.URL.Path
+	if r.URL.RawPath != "" {
+		targetPath = r.URL.RawPath
+	}
+
+	// Also check raw RequestURI / query for path traversal early
+	if strings.Contains(r.RequestURI, "..") || strings.Contains(r.URL.RawQuery, "..") {
+		wafRes := h.wafEngine.Inspect(r.Method, r.RequestURI, r.URL.RawQuery, r.Header, nil)
+		if wafRes.Blocked {
+			_ = h.auditLogger.LogEvent(audit.Event{
+				TraceID:        traceID,
+				ClientID:       "anonymous",
+				ClientIP:       clientIP,
+				Route:          targetPath,
+				Action:         audit.ActionBlocked,
+				ThreatCategory: audit.ThreatCategory(wafRes.ThreatType),
+				Severity:       audit.Severity(wafRes.Severity),
+				Confidence:     1.0,
+				Reason:         wafRes.Reason,
+				MatchedRule:    wafRes.MatchedRule,
+			})
+			h.writeError(w, http.StatusForbidden, traceID, "SECURITY_VIOLATION", string(wafRes.ThreatType), wafRes.Reason, 1.0)
+			return
+		}
+	}
+
+	route, matched := h.table.Match(targetPath)
 	if !matched {
 		h.writeError(w, http.StatusNotFound, traceID, "ROUTE_NOT_FOUND", "NONE", "no matching route found for path", 0)
 		return
