@@ -11,7 +11,7 @@
 > [!NOTE]
 > **ISO Alignment Statement**: NoJect is engineered in strict accordance with the core security principles, architectural controls, and data protection guidelines of **ISO/IEC 27001:2022** (Information Security Management) and **ISO/IEC 42001:2023** (Artificial Intelligence Management System) to empower organizations with ISO-ready technical foundations.
 
-**NoJect** is an open-source, high-performance API Gateway designed to defend modern applications and AI workflows against both **traditional injection attacks** (SQLi, XSS, Command Injection, Path Traversal) and **AI-specific threats** (Prompt Injection, Jailbreaks, System Prompt Extraction, PII Leakage).
+**NoJect** is an open-source **Agentic AI Security Sentinel & API Gateway** designed to defend modern applications and AI workflows against both **traditional injection attacks** (SQLi, XSS, Command Injection, Path Traversal) and **complex AI-specific threats** (Zero-Day Prompt Injections, Multi-step Jailbreaks, System Prompt Extraction, PII Leakage) using **Hybrid Defense: Microsecond Deterministic WAF + Autonomous LLM-as-a-Judge Reasoning**.
 
 <p align="center">
   <img src="docs/assets/noject_master_infographic.png" alt="NoJect Master Executive Infographic" width="1000"/>
@@ -20,29 +20,26 @@
 ```
 [ Client / Application ]
          │
-         ▼ (HTTPS / TLS 1.3)
+         ▼
 ┌─────────────────────────────────────────────────────────────┐
-│  Go Gateway (L7 Reverse Proxy & Fast Shield)                │
-│  - Multi-Auth: API Key / JWT / Bearer / HMAC                │
-│  - Rate Limiter (Token Bucket / Redis-backed)               │
-│  - Fast WAF: SQLi, XSS, CMD Injection, Path Traversal       │
-│  - Dynamic Router: Match Route → Target (LLM / REST API)    │
-└──────────────┬──────────────────────────────┬───────────────┘
-               │ (Internal gRPC/HTTP)         │ (Fast Path / No AI)
-               ▼                              │
-┌──────────────────────────────┐              │
-│ Python AI Guard Engine       │              │
-│ - Prompt Injection Detector  │              │
-│ - Jailbreak & Toxicity Guard │              │
-│ - PII Anonymizer / Masking   │              │
-│ - System Prompt Shield       │              │
-└──────────────┬───────────────┘              │
-               │ (Verdict: Allow/Block/Mask)  │
-               └──────────────┬───────────────┘
-                              ▼
+│ 🚀 Tier 1: Go Ingress Core (L7 Reverse Proxy & Fast WAF)    │
+│   • Sub-millisecond Regex & Lexical Checks (< 0.001 ms)     │
+│   • Multi-Auth Engine: API Key (Argon2), JWT/OIDC, HMAC     │
+└──────────────┬──────────────────────────────────────────────┘
+               │ (AI / LLM Route)
+               ▼
 ┌─────────────────────────────────────────────────────────────┐
-│  Upstream Forwarding (LLM or Backend REST API)              │
-│  Output Canary Token & ISO 27001 Hash-Chained Audit Trail   │
+│ 🧠 Tier 2: Agentic AI Security Sentinel (LLM-as-a-Judge)    │
+│   • Autonomous Semantic Intent & Cognitive Risk Evaluation  │
+│   • Zero-Day Prompt Injection & Multi-Step Jailbreak Defense│
+│   • Automated Sensitive PII Masking (ISO 42001 B.7.2)       │
+└──────────────┬──────────────────────────────────────────────┘
+               │ (If Safe)
+               ▼
+┌─────────────────────────────────────────────────────────────┐
+│ 🤖 Tier 3: Upstream LLMs (OpenAI, Claude, Gemini, DeepSeek) │
+│   • Outbound Canary Secret Leak Defense (MITRE AML.T0043)   │
+│   • ISO 27001 Tamper-Evident SHA-256 Hash Chain Audit Logs  │
 └─────────────────────────────────────────────────────────────┘
 ```
 
@@ -50,14 +47,18 @@
 
 ## 🌟 Key Features
 
-1. **Dual-Engine Architecture**:
-   - **Go Gateway Core**: Microsecond-latency L7 reverse proxy with multi-auth, routing, and fast WAF (< 0.3ms latency).
-   - **Python AI Guard Engine**: Comprehensive detection of Prompt Injections, Jailbreak personas, and sensitive PII masking.
-2. **Multi-Auth Engine**:
+1. **🧠 Agentic AI Security Sentinel (LLM-as-a-Judge)**:
+   - Evaluates complex, indirect, multi-step semantic attacks using autonomous AI reasoning models (pluggable with GPT-4o-mini, Llama-Guard, Mistral, Gemini Flash, or local heuristics).
+2. **⚡ Tiered Hybrid Architecture (< 0.009 ms Fast-Path)**:
+   - **Tier 1 Fast WAF**: Instant microsecond blocking for deterministic SQLi/XSS/CMD attacks.
+   - **Tier 2 Agentic Guard**: Deep semantic reasoning for ambiguous natural language prompts.
+3. **🎭 Automated PII Anonymization & Data Minimization**:
+   - Automatically detects and redacts Thai National IDs, phone numbers, credit cards, emails, and API keys before forwarding to third-party LLMs.
+4. **Multi-Auth Engine**:
    - API Key with Argon2/SHA-256 hashing and Role-Based Access Control (RBAC).
    - JWT / OIDC token validation with JWKS and claims checking.
    - HMAC-SHA256 request signature verification for machine-to-machine traffic.
-3. **Multi-Vector Threat Protection**:
+5. **Multi-Vector Threat Protection**:
    - **Traditional**: SQL Injection, Cross-Site Scripting (XSS), OS Command Injection, Path Traversal (`../`).
    - **AI/LLM (OWASP Top 10 for LLM)**: Direct & indirect prompt injection, DAN jailbreak personas, developer mode overrides, sensitive PII leakage.
 4. **ISO Architectural Alignment & Tamper-Evident Audit Logging**:

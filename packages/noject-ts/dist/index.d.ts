@@ -8,5 +8,6 @@ export * from './ai/promptInjection';
 export * from './ai/jailbreak';
 export * from './ai/piiMasker';
 export * from './ai/canaryShield';
+export * from './ai/agenticSentinel';
 export * from './middlewares/express';
 //# sourceMappingURL=index.d.ts.map

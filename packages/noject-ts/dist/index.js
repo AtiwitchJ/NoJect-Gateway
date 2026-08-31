@@ -24,5 +24,6 @@ __exportStar(require("./ai/promptInjection"), exports);
 __exportStar(require("./ai/jailbreak"), exports);
 __exportStar(require("./ai/piiMasker"), exports);
 __exportStar(require("./ai/canaryShield"), exports);
+__exportStar(require("./ai/agenticSentinel"), exports);
 __exportStar(require("./middlewares/express"), exports);
 //# sourceMappingURL=index.js.map

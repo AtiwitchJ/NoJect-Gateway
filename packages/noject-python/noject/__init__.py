@@ -7,6 +7,7 @@ from noject.detectors.prompt_injection import PromptInjectionDetector
 from noject.detectors.jailbreak import JailbreakDetector
 from noject.detectors.pii_masker import PIIMasker
 from noject.detectors.canary_shield import CanaryShield
+from noject.detectors.agentic_sentinel import AgenticSentinel, AgenticVerdict
 from noject.waf import WAFEngine
 
 __version__ = "1.0.0"
@@ -18,5 +19,7 @@ __all__ = [
     "JailbreakDetector",
     "PIIMasker",
     "CanaryShield",
+    "AgenticSentinel",
+    "AgenticVerdict",
     "WAFEngine",
 ]
