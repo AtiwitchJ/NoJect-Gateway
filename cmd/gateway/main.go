@@ -142,12 +142,13 @@ func main() {
 	// 5. Initialize Route Table and Gateway Handler
 	table := router.NewTable(cfg.Routes)
 	gatewayHandler := router.NewGatewayHandler(router.HandlerConfig{
-		Table:        table,
-		Auth:         multiAuth,
-		WAFEngine:    wafEngine,
-		GuardClient:  guardClient,
-		AuditLogger:  auditLogger,
-		MaxBodyBytes: cfg.Server.MaxBodyBytes,
+		Table:          table,
+		Auth:           multiAuth,
+		WAFEngine:      wafEngine,
+		GuardClient:    guardClient,
+		AuditLogger:    auditLogger,
+		MaxBodyBytes:   cfg.Server.MaxBodyBytes,
+		TrustedProxies: cfg.Server.TrustedProxies,
 	})
 
 	// 6. Setup Multiplexer with Health Checks, Metrics, and Dashboard

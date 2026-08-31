@@ -1,6 +1,7 @@
 import base64
 import binascii
 import codecs
+import html
 import re
 from typing import Dict, Any, List, Optional
 
@@ -15,6 +16,8 @@ class CanaryShield:
     _SEPARATORS = re.compile(r"[\s\-_.,:;|/\\*+·•]")
     _BASE64_RUN = re.compile(r"[A-Za-z0-9+/]{12,}={0,2}")
     _HEX_RUN = re.compile(r"(?:[0-9a-fA-F]{2}){6,}")
+    # Six or more space-separated decimal codes — "spell it in ASCII codes".
+    _DECIMAL_RUN = re.compile(r"(?:\b\d{2,3}\b[ ,]+){5,}\b\d{2,3}\b")
 
     def _decoded_views(self, text: str) -> List[str]:
         """Return alternate representations of the response that a leaked
@@ -61,6 +64,23 @@ class CanaryShield:
                 views.append(bytes.fromhex(candidate).decode("utf-8", errors="ignore"))
             except ValueError:
                 continue
+
+        # HTML entities. "CANARY&#95;SECRET" renders as the real token in any
+        # HTML context, so it is a genuine disclosure, not an approximation.
+        if "&" in clean_text:
+            try:
+                views.append(html.unescape(clean_text))
+            except Exception:
+                pass
+
+        # Space-separated decimal character codes ("67 65 78 65 82 89").
+        for match in self._DECIMAL_RUN.finditer(clean_text):
+            try:
+                codes = [int(n) for n in match.group(0).split()]
+            except ValueError:
+                continue
+            if all(32 <= c <= 126 for c in codes):
+                views.append("".join(chr(c) for c in codes))
 
         return views
 

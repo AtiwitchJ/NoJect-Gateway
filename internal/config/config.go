@@ -22,6 +22,11 @@ type ServerConfig struct {
 	// MaxBodyBytes rejects requests with larger bodies (HTTP 413).
 	// Defaults to DefaultMaxBodyBytes when unset.
 	MaxBodyBytes int64 `yaml:"max_body_bytes"`
+	// TrustedProxies lists CIDRs (or bare IPs) whose X-Forwarded-For header
+	// the gateway will believe when attributing a client IP in the audit
+	// trail. Leave empty when no proxy sits in front: the header is then
+	// ignored, which is what stops a client forging its own audit identity.
+	TrustedProxies []string `yaml:"trusted_proxies"`
 }
 
 // DashboardConfig controls access to the operator surfaces

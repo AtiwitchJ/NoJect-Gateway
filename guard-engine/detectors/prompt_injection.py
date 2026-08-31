@@ -5,6 +5,7 @@ from .text_normalize import (
     deleetify,
     extract_base64_payloads,
     extract_hex_payloads,
+    normalize_unicode,
     rot13,
     strip_zero_width,
 )
@@ -42,6 +43,23 @@ class PromptInjectionDetector:
         # Korean: 이전 지시 무시 / 시스템 프롬프트 알려줘
         r"(이전|모든)\s*(지시|명령|규칙)\s*(을|를)?\s*(무시|잊어)",
         r"(시스템\s*프롬프트|초기\s*지시)\s*(을|를)?\s*(알려|보여|출력)",
+        # French: ignorez/oubliez + instructions/consignes ; révélez + prompt système
+        r"(?i)(ignore[zr]?|oublie[zr]?|negligez|passe[zr]?\s+outre)\s+(toutes?\s+)?(les\s+)?(instructions?|consignes?|regles?|directives?)\s*(precedentes?|anterieures?|ci-dessus)?",
+        r"(?i)(revele[zr]?|montre[zr]?|affiche[zr]?|donne[zr]?)\s+(moi\s+)?(ton|votre|le)\s+(prompt\s+syst|instructions?\s+initiales?|message\s+syst)",
+        # German: ignoriere/vergiss + Anweisungen ; zeige + System-Prompt
+        r"(?i)(ignoriere?|vergiss|missachte|uberspringe)\s+(alle\s+)?(vorherigen?|bisherigen?|obigen?)?\s*(anweisungen|anleitungen|regeln|vorgaben)",
+        r"(?i)(zeige?|nenne?|gib|offenbare?)\s+(mir\s+)?(deinen?|den|ihren?)\s+(system[- ]?prompt|systemanweisungen|urspruenglichen anweisungen)",
+        # Spanish: ignora/olvida + instrucciones ; revela + prompt del sistema
+        r"(?i)(ignora|olvida|desatiende|omite)\s+(todas\s+)?(las\s+)?(instrucciones|reglas|indicaciones|directrices)\s*(anteriores|previas)?",
+        r"(?i)(revela|muestra|dime|imprime)\s+(me\s+)?(tu|el)\s+(prompt\s+del\s+sistema|instrucciones\s+iniciales|mensaje\s+del\s+sistema)",
+        # Portuguese: ignore/esqueca + instrucoes
+        r"(?i)(ignore|esqueca|desconsidere)\s+(todas\s+)?(as\s+)?(instrucoes|regras|orientacoes)\s*(anteriores|previas)?",
+        # Russian: игнорируй/забудь + инструкции ; покажи системный промпт
+        r"(?i)(игнорируй|игнорируйте|забудь|забудьте|не\s+обращай\s+внимания)\s*(на)?\s*(все)?\s*(предыдущие|прежние)?\s*(инструкции|правила|указания)",
+        r"(?i)(покажи|раскрой|выведи|назови)\s*(мне)?\s*(свой|системный)\s*(промпт|системный\s+промпт|системное\s+сообщение|начальные\s+инструкции)",
+        # Arabic: تجاهل + التعليمات ; أظهر + موجه النظام
+        r"(تجاهل|انس|أهمل)\s*(كل|جميع)?\s*(ال)?(تعليمات|التعليمات|القواعد|الأوامر)",
+        r"(أظهر|اكشف|اعرض|قل)\s*(لي)?\s*(موجه\s*النظام|تعليماتك\s*الأولية|رسالة\s*النظام)",
     ]
 
     def __init__(self):
@@ -93,10 +111,12 @@ class PromptInjectionDetector:
         # the model while breaking literal keyword matching. They are
         # checked in addition to the raw text, never instead of it.
         views = [
+            ("unicode/homoglyph normalization", normalize_unicode(clean_text)),
             ("zero-width stripping", strip_zero_width(clean_text)),
             ("leetspeak normalization", deleetify(clean_text)),
             ("spaced-letter collapse", collapse_spaced_letters(clean_text)),
             ("ROT13 decoding", rot13(clean_text)),
+            ("unicode + zero-width normalization", normalize_unicode(strip_zero_width(clean_text))),
         ]
         # Spaced-out text is often also leetspoken; check the combination.
         collapsed = collapse_spaced_letters(strip_zero_width(clean_text))

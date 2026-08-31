@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"net/url"
 	"strings"
@@ -28,6 +29,9 @@ type GatewayHandler struct {
 	auditLogger  audit.Logger
 	httpClient   *http.Client
 	maxBodyBytes int64
+	// trustedProxies are the peers whose X-Forwarded-For header may be
+	// believed. Empty means "no proxy in front" — the header is ignored.
+	trustedProxies []*net.IPNet
 }
 
 // DefaultMaxBodyBytes bounds request bodies the gateway will buffer when
@@ -44,6 +48,10 @@ type HandlerConfig struct {
 	// MaxBodyBytes caps how much request body is read into memory.
 	// Defaults to DefaultMaxBodyBytes when zero or negative.
 	MaxBodyBytes int64
+	// TrustedProxies lists CIDRs whose X-Forwarded-For header is believed.
+	// Leave empty unless the gateway really is behind a proxy: an empty
+	// list is the safe default, since it makes RemoteAddr authoritative.
+	TrustedProxies []string
 }
 
 // NewGatewayHandler creates a fully initialized GatewayHandler.
@@ -63,8 +71,34 @@ func NewGatewayHandler(cfg HandlerConfig) *GatewayHandler {
 		httpClient: &http.Client{
 			Timeout: 60 * time.Second,
 		},
-		maxBodyBytes: cfg.MaxBodyBytes,
+		maxBodyBytes:   cfg.MaxBodyBytes,
+		trustedProxies: parseCIDRs(cfg.TrustedProxies),
 	}
+}
+
+// parseCIDRs converts configured trusted-proxy entries to networks. A bare
+// IP is accepted and treated as a single-host network. Unparseable entries
+// are skipped rather than silently widening trust.
+func parseCIDRs(entries []string) []*net.IPNet {
+	var nets []*net.IPNet
+	for _, entry := range entries {
+		entry = strings.TrimSpace(entry)
+		if entry == "" {
+			continue
+		}
+		if _, network, err := net.ParseCIDR(entry); err == nil {
+			nets = append(nets, network)
+			continue
+		}
+		if ip := net.ParseIP(entry); ip != nil {
+			bits := 32
+			if ip.To4() == nil {
+				bits = 128
+			}
+			nets = append(nets, &net.IPNet{IP: ip, Mask: net.CIDRMask(bits, bits)})
+		}
+	}
+	return nets
 }
 
 // generateTraceID creates a W3C traceparent compatible identifier.
@@ -83,6 +117,62 @@ type ErrorResponse struct {
 	Reason     string  `json:"reason"`
 	TraceID    string  `json:"trace_id"`
 	Confidence float64 `json:"confidence,omitempty"`
+}
+
+// clientIP resolves the address recorded in the audit trail.
+//
+// X-Forwarded-For is set by the client and is trivially forged: a request
+// carrying "X-Forwarded-For: 1.2.3.4" previously caused every audit record
+// for that attack to name 1.2.3.4 instead of the real peer. An audit trail
+// the attacker can write to is worse than none — it launders their identity
+// and can frame an innocent address, while the hash chain attests to the
+// forged value as faithfully as it would a true one.
+//
+// The header is therefore honoured ONLY when the immediate peer is a
+// configured trusted proxy. With no proxy configured, it is ignored
+// entirely and RemoteAddr is authoritative.
+func (h *GatewayHandler) clientIP(r *http.Request) string {
+	remote := r.RemoteAddr
+	if len(h.trustedProxies) == 0 {
+		return remote
+	}
+
+	host := remote
+	if parsed, _, err := net.SplitHostPort(remote); err == nil {
+		host = parsed
+	}
+	peer := net.ParseIP(host)
+	if peer == nil || !h.isTrustedProxy(peer) {
+		return remote
+	}
+
+	forwarded := r.Header.Get("X-Forwarded-For")
+	if forwarded == "" {
+		return remote
+	}
+	// Walk right-to-left and take the first address that is NOT itself a
+	// trusted proxy: that is the earliest hop we can still vouch for. The
+	// leftmost entry is whatever the client prepended — the forgeable part.
+	parts := strings.Split(forwarded, ",")
+	for i := len(parts) - 1; i >= 0; i-- {
+		candidate := net.ParseIP(strings.TrimSpace(parts[i]))
+		if candidate == nil {
+			continue
+		}
+		if !h.isTrustedProxy(candidate) {
+			return candidate.String()
+		}
+	}
+	return remote
+}
+
+func (h *GatewayHandler) isTrustedProxy(ip net.IP) bool {
+	for _, cidr := range h.trustedProxies {
+		if cidr.Contains(ip) {
+			return true
+		}
+	}
+	return false
 }
 
 func (h *GatewayHandler) writeError(w http.ResponseWriter, status int, traceID, errType, threatType, reason string, confidence float64) {
@@ -217,10 +307,7 @@ func (h *GatewayHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		traceID = generateTraceID()
 	}
 
-	clientIP := r.RemoteAddr
-	if forwarded := r.Header.Get("X-Forwarded-For"); forwarded != "" {
-		clientIP = strings.Split(forwarded, ",")[0]
-	}
+	clientIP := h.clientIP(r)
 
 	// 1. Route Matching
 	targetPath := r.URL.Path

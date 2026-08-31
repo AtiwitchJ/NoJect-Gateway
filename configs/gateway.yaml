@@ -3,6 +3,11 @@ version: "1.0"
 server:
   host: "0.0.0.0"
   port: 8080
+  # CIDRs whose X-Forwarded-For header is believed when attributing the
+  # client IP in the audit trail. MUST stay empty unless a proxy really is
+  # in front: the header is client-controlled, so trusting it lets an
+  # attacker choose the IP recorded against their own requests.
+  trusted_proxies: []
   tls:
     enabled: false
     cert_file: ""

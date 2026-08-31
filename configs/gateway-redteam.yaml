@@ -1,0 +1,64 @@
+version: "1.0"
+
+server:
+  host: "127.0.0.1"
+  port: 8080
+  tls:
+    enabled: false
+    cert_file: ""
+    key_file: ""
+
+auth:
+  api_key:
+    enabled: true
+    header: "X-API-Key"
+    keys:
+      - key: "sk-noject-demo-client-key"
+        id: "redteam-client"
+        tenant_id: "redteam"
+        roles: ["user"]
+        rate_limit: 100000
+
+guard_engine:
+  endpoint: "http://127.0.0.1:50051"
+  timeout_ms: 3000
+  fallback_action: "BLOCK"
+
+routes:
+  # LLM route pointing at a LOCAL echo upstream so we can observe what the
+  # model would actually receive after guard processing.
+  - id: "llm-echo"
+    path: "/v1/chat/completions"
+    upstream: "http://127.0.0.1:3000/v1/chat/completions"
+    type: "llm"
+    auth_required: true
+    required_roles: ["user"]
+    canary_tokens:
+      - "CANARY_SECRET_ALPHA_12345"
+    guardrails:
+      fast_waf: false
+      prompt_injection: true
+      jailbreak: true
+      pii_masking: true
+      output_guard: true
+      agentic_sentinel: false
+
+  - id: "backend-rest-api"
+    path: "/api/*"
+    upstream: "http://127.0.0.1:3000"
+    type: "rest"
+    auth_required: true
+    required_roles: ["user"]
+    guardrails:
+      fast_waf: true
+      prompt_injection: false
+      jailbreak: false
+      pii_masking: false
+      output_guard: false
+      agentic_sentinel: false
+
+audit:
+  driver: "file"
+  output_path: "logs/audit-round2.log"
+  hash_chaining: true
+  iso_compliance_mode: true

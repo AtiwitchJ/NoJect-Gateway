@@ -166,18 +166,32 @@ func (e *Engine) Inspect(method, path, query string, headers http.Header, body [
 		}
 	}
 
-	// 3. SQL Injection Inspection
+	// 3. SQL Injection Inspection — path, query, body, and headers.
+	// Path is in scope because REST-style routes put user input directly in
+	// path segments (/api/users/{id}), which reaches the same query builder
+	// as a query parameter. Headers are in scope because values like
+	// Cookie and Authorization are routinely used as lookup keys.
 	if e.config.EnableSQLi {
+		if res := checkSQLi(normPath); res != nil {
+			return res
+		}
 		if res := checkSQLi(normQuery); res != nil {
 			return res
 		}
 		if res := checkSQLi(normBody); res != nil {
 			return res
 		}
+		if res := scanHeaders(headers, checkSQLi); res != nil {
+			return res
+		}
 	}
 
-	// 4. XSS Inspection (Query, Body, and Critical Headers)
+	// 4. XSS Inspection — path, query, body, and headers. Path segments are
+	// reflected into error pages and breadcrumbs as often as query values.
 	if e.config.EnableXSS {
+		if res := checkXSS(normPath); res != nil {
+			return res
+		}
 		if res := checkXSS(normQuery); res != nil {
 			return res
 		}
@@ -198,9 +212,25 @@ func (e *Engine) Inspect(method, path, query string, headers http.Header, body [
 }
 
 // scannedHeaders are the headers inspected for injection payloads —
-// attacker-controlled, commonly reflected or logged, never expected to
-// carry SQL/shell/traversal syntax.
-var scannedHeaders = []string{"Referer", "User-Agent", "X-Forwarded-For"}
+// attacker-controlled, commonly reflected, logged, or used as lookup keys,
+// and never expected to carry SQL/shell/traversal syntax.
+//
+// Cookie and Authorization matter most and were the longest-missing: both
+// are fully attacker-controlled and both are routinely fed straight into a
+// session or token lookup query, which is exactly the sink SQLi needs.
+// Restricting the scan to Referer/User-Agent/X-Forwarded-For left the
+// highest-value header sinks unscanned.
+var scannedHeaders = []string{
+	"Referer",
+	"User-Agent",
+	"X-Forwarded-For",
+	"Cookie",
+	"Authorization",
+	"X-Forwarded-Host",
+	"X-Real-IP",
+	"Origin",
+	"X-Api-Key",
+}
 
 // scanHeaders runs checkFn against each scanned header value, normalized.
 func scanHeaders(headers http.Header, checkFn func(string) *WAFResult) *WAFResult {

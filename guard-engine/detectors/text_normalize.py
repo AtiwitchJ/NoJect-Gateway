@@ -2,6 +2,7 @@ import base64
 import binascii
 import codecs
 import re
+import unicodedata
 import urllib.parse
 from typing import List
 
@@ -25,6 +26,37 @@ def strip_zero_width(text: str) -> str:
     if not text:
         return ""
     return _ZERO_WIDTH_PATTERN.sub("", text)
+
+
+# Confusables that NFKC does NOT fold, because they are genuinely distinct
+# codepoints — Cyrillic/Greek letters that render identically to Latin ones.
+# A model reads "іgnore" (Cyrillic і) as "ignore"; a regex does not.
+_CONFUSABLES = str.maketrans({
+    "а": "a", "е": "e", "о": "o", "р": "p", "с": "c", "х": "x", "у": "y",
+    "і": "i", "ѕ": "s", "ј": "j", "һ": "h", "ԁ": "d", "ɡ": "g", "ⅼ": "l",
+    "Α": "A", "Β": "B", "Ε": "E", "Ζ": "Z", "Η": "H", "Ι": "I", "Κ": "K",
+    "Μ": "M", "Ν": "N", "Ο": "O", "Ρ": "P", "Τ": "T", "Χ": "X",
+    "А": "A", "В": "B", "Е": "E", "К": "K", "М": "M", "Н": "H", "О": "O",
+    "Р": "P", "С": "C", "Т": "T", "Х": "X",
+    "ı": "i", "İ": "I", "ｌ": "l",
+})
+
+
+def normalize_unicode(text: str) -> str:
+    """Fold Unicode variants to their ASCII skeleton before matching.
+
+    Two separate problems:
+      - NFKC handles compatibility forms: fullwidth (ｉｇｎｏｒｅ), ligatures,
+        superscripts, and non-breaking spaces.
+      - NFKC deliberately does NOT fold visually-identical characters from
+        other scripts, since Cyrillic "о" really is a different letter from
+        Latin "o". Those need an explicit confusables table.
+
+    A model reads both forms as the intended word, so the filter must too.
+    """
+    if not text:
+        return ""
+    return unicodedata.normalize("NFKC", text).translate(_CONFUSABLES)
 
 
 def rot13(text: str) -> str:

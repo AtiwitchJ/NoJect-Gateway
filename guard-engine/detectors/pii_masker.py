@@ -48,7 +48,10 @@ class PIIMasker:
         # thing to lose.
         ("API_KEY", r"\b(sk-[a-zA-Z0-9_-]{20,}|ghp_[a-zA-Z0-9]{36}|AKIA[0-9A-Z]{16})\b", "[REDACTED_API_KEY]"),
         # Thai National ID: 13 digits with or without hyphens
-        ("THAI_ID", r"\b\d{1}[-\s]?\d{4}[-\s]?\d{5}[-\s]?\d{2}[-\s]?\d{1}\b", "[REDACTED_THAI_ID]"),
+        # Separators may be hyphen, space, dot, or slash — people write Thai
+        # IDs every one of those ways, and pinning the pattern to [-\s] let
+        # "1/1002/00345/67/8" through unmasked.
+        ("THAI_ID", r"\b\d{1}[-.\s/]?\d{4}[-.\s/]?\d{5}[-.\s/]?\d{2}[-.\s/]?\d{1}\b", "[REDACTED_THAI_ID]"),
         # Credit Card: Visa, MasterCard, Amex, Discover (13-19 digits with separators)
         # 13-19 digits: the ISO/IEC 7812 PAN range. The old pattern hard-coded
         # 16 digits with a trailing \b, so a 19-digit UnionPay/Visa number
@@ -66,7 +69,10 @@ class PIIMasker:
         # The lookarounds exclude adjacent alphanumerics, not just digits, so
         # a digit run embedded in an identifier or token is not mistaken for
         # a phone number.
-        ("PHONE", r"(?<![\w])(?:\+66|0)[2689]\d[-.\s]?\d{3}[-.\s]?\d{4}(?![\w])|(?<![\w+])(?:\+?1[-.\s]?)?\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4}(?![\w])", "[REDACTED_PHONE]"),
+        # The Thai branch allows a separator after the country/trunk code
+        # too: "+66 81 234-5678" is how the number is normally written by
+        # hand, and requiring the first group to be contiguous missed it.
+        ("PHONE", r"(?<![\w])(?:\+66|0)[-.\s]?[2689][-.\s]?\d[-.\s]?\d{3}[-.\s]?\d{4}(?![\w])|(?<![\w+])(?:\+?1[-.\s]?)?\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4}(?![\w])", "[REDACTED_PHONE]"),
     ]
 
     def __init__(self):
