@@ -1,0 +1,74 @@
+version: "1.0"
+
+server:
+  host: "0.0.0.0"
+  port: 8080
+  tls:
+    enabled: false
+    cert_file: ""
+    key_file: ""
+
+auth:
+  api_key:
+    enabled: true
+    header: "X-API-Key"
+    keys:
+      - key: "sk-noject-demo-admin-key"
+        id: "admin-user"
+        tenant_id: "default-tenant"
+        roles: ["admin", "developer", "user"]
+        rate_limit: 1000
+      - key: "sk-noject-demo-client-key"
+        id: "app-client-1"
+        tenant_id: "client-tenant"
+        roles: ["user"]
+        rate_limit: 100
+
+  jwt:
+    enabled: false
+    secret: "change-this-to-a-secure-random-32-byte-secret"
+    issuer: "https://auth.noject.io"
+    audience: "noject-api"
+
+guard_engine:
+  endpoint: "http://127.0.0.1:50051"
+  timeout_ms: 3000
+  fallback_action: "BLOCK"
+
+routes:
+  # LLM Route: OpenAI Compatible proxy with Prompt Injection, Jailbreak and PII Guard
+  - id: "llm-openai-chat"
+    path: "/v1/chat/completions"
+    upstream: "https://api.openai.com/v1/chat/completions"
+    type: "llm"
+    auth_required: true
+    required_roles: ["user"]
+    canary_tokens:
+      - "CANARY_SECRET_ALPHA"
+      - "CANARY_SECRET_INTERNAL"
+    guardrails:
+      fast_waf: false
+      prompt_injection: true
+      jailbreak: true
+      pii_masking: true
+      output_guard: true
+
+  # Generic Backend REST API Route with Fast-Path WAF protection
+  - id: "backend-rest-api"
+    path: "/api/*"
+    upstream: "http://127.0.0.1:3000"
+    type: "rest"
+    auth_required: true
+    required_roles: ["user"]
+    guardrails:
+      fast_waf: true
+      prompt_injection: false
+      jailbreak: false
+      pii_masking: false
+      output_guard: false
+
+audit:
+  driver: "file"
+  output_path: "logs/audit.log"
+  hash_chaining: true
+  iso_compliance_mode: true

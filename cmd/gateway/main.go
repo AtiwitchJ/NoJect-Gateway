@@ -1,0 +1,179 @@
+package main
+
+import (
+	"context"
+	"flag"
+	"fmt"
+	"log"
+	"net/http"
+	"os"
+	"os/signal"
+	"syscall"
+	"time"
+
+	"noject/internal/audit"
+	"noject/internal/auth"
+	"noject/internal/config"
+	"noject/internal/guardclient"
+	"noject/internal/router"
+	"noject/internal/waf"
+)
+
+const (
+	Version = "1.0.0"
+	Banner  = `
+  _   _         _           _   
+ | \ | |       | |         | |  
+ |  \| | ___   | | ___  ___| |_ 
+ | . ` + "`" + ` |/ _ \  | |/ _ \/ __| __|
+ | |\  | (_) |_| |  __/ (__| |_ 
+ |_| \_|\___/\__/ \___|\___|\__|
+ Universal AI & Security API Gateway (ISO 27001 / ISO 42001)
+`
+)
+
+func main() {
+	configPath := flag.String("config", "configs/gateway.yaml", "Path to YAML configuration file")
+	showVersion := flag.Bool("version", false, "Print version information and exit")
+	verifyAuditPath := flag.String("verify-audit", "", "Verify the cryptographic hash-chain of an audit log file")
+	flag.Parse()
+
+	if *showVersion {
+		fmt.Printf("NoJect Gateway v%s\n", Version)
+		os.Exit(0)
+	}
+
+	// Tooling mode: Verify audit logs
+	if *verifyAuditPath != "" {
+		f, err := os.Open(*verifyAuditPath)
+		if err != nil {
+			log.Fatalf("Error opening audit log: %v", err)
+		}
+		defer f.Close()
+
+		res, err := audit.VerifyChain(f)
+		if err != nil {
+			log.Fatalf("Audit verification error: %v", err)
+		}
+
+		if res.Valid {
+			fmt.Printf("✅ AUDIT LOG INTEGRITY VERIFIED: All %d records match SHA-256 hash chain.\n", res.TotalRecords)
+			os.Exit(0)
+		} else {
+			fmt.Printf("❌ AUDIT LOG TAMPERING DETECTED at record %d: %s\n", res.BrokenAtIndex, res.Reason)
+			os.Exit(1)
+		}
+	}
+
+	fmt.Print(Banner)
+	log.Printf("[INFO] Loading configuration from %s...", *configPath)
+
+	cfg, err := config.Load(*configPath)
+	if err != nil {
+		log.Fatalf("[FATAL] Failed to load configuration: %v", err)
+	}
+
+	// 1. Initialize ISO 27001 Audit Logger
+	auditLogger, err := audit.NewFileLogger(cfg.Audit.OutputPath)
+	if err != nil {
+		log.Fatalf("[FATAL] Failed to initialize audit logger: %v", err)
+	}
+	defer auditLogger.Close()
+	log.Printf("[INFO] ISO 27001 Audit Logger active (Output: %s, HashChaining: %v)", cfg.Audit.OutputPath, cfg.Audit.HashChaining)
+
+	// 2. Initialize Multi-Auth
+	var authOpts []auth.Option
+	if cfg.Auth.APIKey.Enabled {
+		apiKeyRegistry := auth.NewAPIKeyRegistry()
+		for _, k := range cfg.Auth.APIKey.Keys {
+			apiKeyRegistry.RegisterKey(k.Key, auth.APIKeyMetadata{
+				ID:        k.ID,
+				TenantID:  k.TenantID,
+				Roles:     k.Roles,
+				RateLimit: k.RateLimit,
+			})
+		}
+		authOpts = append(authOpts, auth.WithAPIKeyAuth(apiKeyRegistry, cfg.Auth.APIKey.Header))
+		log.Printf("[INFO] API Key Auth enabled (%d keys loaded)", len(cfg.Auth.APIKey.Keys))
+	}
+
+	if cfg.Auth.JWT.Enabled {
+		jwtAuth := auth.NewJWTAuthenticator(auth.JWTConfig{
+			Secret:   []byte(cfg.Auth.JWT.Secret),
+			Issuer:   cfg.Auth.JWT.Issuer,
+			Audience: cfg.Auth.JWT.Audience,
+		})
+		authOpts = append(authOpts, auth.WithJWTAuth(jwtAuth))
+		log.Printf("[INFO] JWT Auth enabled (Issuer: %s)", cfg.Auth.JWT.Issuer)
+	}
+
+	multiAuth := auth.NewMultiAuthenticator(authOpts...)
+
+	// 3. Initialize Fast-Path WAF
+	wafEngine := waf.NewEngine(waf.DefaultConfig())
+	log.Printf("[INFO] Fast-Path WAF active (SQLi, XSS, CMD, Path Traversal)")
+
+	// 4. Initialize AI Guard Client
+	guardClient := guardclient.NewClient(guardclient.Config{
+		Endpoint:       cfg.GuardEngine.Endpoint,
+		Timeout:        time.Duration(cfg.GuardEngine.TimeoutMS) * time.Millisecond,
+		FallbackAction: cfg.GuardEngine.FallbackAction,
+	})
+	log.Printf("[INFO] AI Guard Client connected to %s (Timeout: %dms)", cfg.GuardEngine.Endpoint, cfg.GuardEngine.TimeoutMS)
+
+	// 5. Initialize Route Table and Gateway Handler
+	table := router.NewTable(cfg.Routes)
+	gatewayHandler := router.NewGatewayHandler(router.HandlerConfig{
+		Table:       table,
+		Auth:        multiAuth,
+		WAFEngine:   wafEngine,
+		GuardClient: guardClient,
+		AuditLogger: auditLogger,
+	})
+
+	// 6. Setup Multiplexer with Health Checks
+	mux := http.NewServeMux()
+	mux.HandleFunc("/healthz", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`{"status":"healthy","version":"` + Version + `"}`))
+	})
+	mux.HandleFunc("/readyz", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`{"status":"ready"}`))
+	})
+	mux.Handle("/", gatewayHandler)
+
+	serverAddr := fmt.Sprintf("%s:%d", cfg.Server.Host, cfg.Server.Port)
+	server := &http.Server{
+		Addr:         serverAddr,
+		Handler:      mux,
+		ReadTimeout:  30 * time.Second,
+		WriteTimeout: 60 * time.Second,
+		IdleTimeout:  120 * time.Second,
+	}
+
+	// 7. Graceful Shutdown listener
+	stopChan := make(chan os.Signal, 1)
+	signal.Notify(stopChan, os.Interrupt, syscall.SIGTERM)
+
+	go func() {
+		log.Printf("[INFO] 🚀 NoJect Gateway listening on %s", serverAddr)
+		if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+			log.Fatalf("[FATAL] Server error: %v", err)
+		}
+	}()
+
+	<-stopChan
+	log.Println("[INFO] Shutting down gracefully...")
+
+	shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	if err := server.Shutdown(shutdownCtx); err != nil {
+		log.Printf("[ERROR] Server shutdown error: %v", err)
+	}
+
+	log.Println("[INFO] NoJect Gateway stopped successfully.")
+}
