@@ -82,6 +82,7 @@ Verify audit log integrity:
 ---
 
 ## 📚 Documentation
+- 📊 [Detailed Benchmark Results (All Injection Vectors)](docs/BENCHMARKS.md)
 - 📖 [Quickstart Guide](docs/QUICKSTART.md)
 - 🔒 [ISO Compliance Matrix (ISO 27001 / ISO 42001)](docs/ISO_COMPLIANCE.md)
 - 📐 [Technical Design Specification](docs/superpowers/specs/2026-08-31-noject-gateway-design.md)
