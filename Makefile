@@ -1,4 +1,4 @@
-.PHONY: all build test test-go test-py test-python-lib test-ts-lib test-libs build-libs lint clean proto run-gateway run-guard
+.PHONY: all build test test-go test-py redteam test-python-lib test-ts-lib test-libs build-libs lint clean proto run-gateway run-guard
 
 GO ?= go
 PYTHON ?= python3
@@ -35,6 +35,10 @@ test-python-lib:
 
 test-ts-lib:
 	cd packages/noject-ts && $(NPM) test
+
+redteam:
+	$(PYTHON) guard-engine/redteam_guard.py
+	$(GO) run ./redteam
 
 bench: bench-go bench-py bench-models bench-sentinels
 
