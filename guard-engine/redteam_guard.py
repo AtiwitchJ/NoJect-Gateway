@@ -150,10 +150,16 @@ def run_all():
 
     print("-" * 120)
     print(f"TOTAL BYPASSES: {len(bypasses)}")
+    bypass_names = [b[0] for b in bypasses]
+    total_attacks = len(attacks) + len(sentinel_attacks)
     if bypasses:
         print("\n=== SUCCESSFUL EVASIONS ===")
         for b in bypasses:
             print(f"  {b[0]}\n    payload: {b[1][:100]!r}\n    why    : {b[2][:100]}\n")
+    return bypass_names, total_attacks
 
 if __name__ == "__main__":
-    run_all()
+    import sys
+    from redteam_baseline import check
+    names, total = run_all()
+    sys.exit(check("redteam_guard", names, total))

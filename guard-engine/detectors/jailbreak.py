@@ -6,6 +6,7 @@ from .text_normalize import (
     extract_base64_payloads,
     extract_hex_payloads,
     normalize_unicode,
+    normalization_views,
     rot13,
     strip_zero_width,
 )
@@ -76,39 +77,14 @@ class JailbreakDetector:
         if result:
             return result
 
-        # Alternate views of the same text: each is a cheap obfuscation
-        # that keeps the payload legible to the model while defeating
-        # literal keyword matching. Checked in addition to the raw text.
-        views = [
-            ("unicode/homoglyph normalization", normalize_unicode(clean_text)),
-            ("zero-width stripping", strip_zero_width(clean_text)),
-            ("leetspeak normalization", deleetify(clean_text)),
-            ("spaced-letter collapse", collapse_spaced_letters(clean_text)),
-            ("ROT13 decoding", rot13(clean_text)),
-            ("unicode + zero-width normalization", normalize_unicode(strip_zero_width(clean_text))),
-            ("spaced-letter collapse", deleetify(collapse_spaced_letters(strip_zero_width(clean_text)))),
-        ]
-        for label, view in views:
-            if view == clean_text:
-                continue
+        # Alternate readings of the same text. Obfuscations compose, so
+        # these are built by applying normalizers cumulatively and decoding
+        # encoded payloads recursively — see normalization_views().
+        for label, view in normalization_views(clean_text):
             result = self._scan(view)
             if result:
                 result["reason"] += f" [via {label}]"
                 return result
-
-        for label, decoder in (
-            ("base64-decoded payload", extract_base64_payloads),
-            ("hex-decoded payload", extract_hex_payloads),
-        ):
-            for decoded in decoder(clean_text):
-                result = (
-                    self._scan(decoded)
-                    or self._scan(deleetify(decoded))
-                    or self._scan(rot13(decoded))
-                )
-                if result:
-                    result["reason"] += f" [via {label}]"
-                    return result
 
         return {
             "detected": False,

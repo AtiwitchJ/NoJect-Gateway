@@ -161,3 +161,11 @@ print("=== BYPASSED payloads ===")
 for name, layer, verdict, detail, payload in rows:
     if verdict == "BYPASS":
         print(f"[{layer}] {name}\n  payload: {payload[:120]!r}\n")
+
+
+# ---------- CI gate ----------
+if __name__ != "__mp_main__":
+    import sys as _sys
+    from redteam_baseline import check as _check
+    _bypassed = [name for name, layer, verdict, detail, payload in rows if verdict == "BYPASS"]
+    _sys.exit(_check("redteam_guard2", _bypassed, len(rows)))

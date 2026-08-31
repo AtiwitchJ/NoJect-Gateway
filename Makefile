@@ -20,7 +20,7 @@ run-gateway:
 run-guard:
 	cd guard-engine && $(PYTHON) server.py
 
-test: test-go test-py test-libs
+test: test-go test-py test-libs redteam
 
 test-go:
 	$(GO) test -v -race ./...
@@ -36,9 +36,12 @@ test-python-lib:
 test-ts-lib:
 	cd packages/noject-ts && $(NPM) test
 
+# Adversarial corpora, gated against a recorded baseline (see
+# guard-engine/redteam_baseline.py). Fails on regression AND on an
+# un-locked-in improvement, so coverage can only ratchet upward.
 redteam:
-	$(PYTHON) guard-engine/redteam_guard.py
-	$(GO) run ./redteam
+	cd guard-engine && $(PYTHON) redteam_guard.py
+	cd guard-engine && $(PYTHON) redteam_guard2.py
 
 bench: bench-go bench-py bench-models bench-sentinels
 

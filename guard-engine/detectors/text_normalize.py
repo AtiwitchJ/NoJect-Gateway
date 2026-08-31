@@ -32,13 +32,22 @@ def strip_zero_width(text: str) -> str:
 # codepoints — Cyrillic/Greek letters that render identically to Latin ones.
 # A model reads "іgnore" (Cyrillic і) as "ignore"; a regex does not.
 _CONFUSABLES = str.maketrans({
+    # Cyrillic lowercase
     "а": "a", "е": "e", "о": "o", "р": "p", "с": "c", "х": "x", "у": "y",
     "і": "i", "ѕ": "s", "ј": "j", "һ": "h", "ԁ": "d", "ɡ": "g", "ⅼ": "l",
+    "ь": "b", "г": "r", "т": "t", "м": "m", "к": "k", "н": "h", "в": "b",
+    # Greek lowercase — omicron in "ignοre" is the classic one, and it was
+    # missing while only the uppercase forms were mapped.
+    "ο": "o", "α": "a", "ε": "e", "ι": "i", "κ": "k", "ν": "v", "ρ": "p",
+    "τ": "t", "υ": "u", "χ": "x", "μ": "u", "σ": "o", "γ": "y",
+    # Greek uppercase
     "Α": "A", "Β": "B", "Ε": "E", "Ζ": "Z", "Η": "H", "Ι": "I", "Κ": "K",
-    "Μ": "M", "Ν": "N", "Ο": "O", "Ρ": "P", "Τ": "T", "Χ": "X",
+    "Μ": "M", "Ν": "N", "Ο": "O", "Ρ": "P", "Τ": "T", "Χ": "X", "Υ": "Y",
+    # Cyrillic uppercase
     "А": "A", "В": "B", "Е": "E", "К": "K", "М": "M", "Н": "H", "О": "O",
     "Р": "P", "С": "C", "Т": "T", "Х": "X",
-    "ı": "i", "İ": "I", "ｌ": "l",
+    # Misc
+    "ı": "i", "İ": "I", "ｌ": "l", "ɑ": "a", "ᴏ": "o", "ѐ": "e",
 })
 
 
@@ -145,6 +154,80 @@ def extract_base64_payloads(text: str, max_segments: int = 5) -> List[str]:
 
 
 _HEX_RUN = re.compile(r"(?:(?:0x|\\x)?([0-9a-fA-F]{2})[\s,:-]?){8,}")
+
+
+def normalization_views(text: str, max_views: int = 24) -> List[tuple]:
+    """Yield (label, text) alternate readings of one candidate.
+
+    Obfuscations compose — an attacker writes "1𝐠𝐧𝐨𝐫𝐞" (math-bold AND
+    leetspeak), or percent-encodes a phrase, or base64-wraps a hex string.
+    Enumerating a fixed list of single transforms and a couple of
+    hand-picked pairs misses every combination not on the list, which is
+    how "math-bold leet hybrid", "url-encoded ignore", and "hex then
+    base64 nested" all slipped through.
+
+    So: build views by applying the cheap character-level normalizers
+    CUMULATIVELY, and decode encoded payloads RECURSIVELY to a bounded
+    depth. The attacker can layer transforms freely; the defender has to
+    unwrap them the same way.
+    """
+    views: List[tuple] = []
+    seen = {text}
+
+    def add(label: str, value: str) -> None:
+        if value and value not in seen and len(views) < max_views:
+            seen.add(value)
+            views.append((label, value))
+
+    # Cumulative character-level normalization. Each step is applied on top
+    # of the previous, so a payload combining several is still resolved.
+    stages = [
+        ("url-decoding", url_unescape_text),
+        ("unicode/homoglyph normalization", normalize_unicode),
+        ("zero-width stripping", strip_zero_width),
+        ("spaced-letter collapse", collapse_spaced_letters),
+        ("leetspeak normalization", deleetify),
+    ]
+    current = text
+    labels: List[str] = []
+    for label, fn in stages:
+        nxt = fn(current)
+        if nxt != current:
+            labels.append(label)
+            current = nxt
+            add(" + ".join(labels), current)
+
+    # ROT13 is not cumulative — it is an involution, so applying it to an
+    # already-normalized view is the useful form, not part of the chain.
+    add("ROT13 decoding", rot13(text))
+    if current != text:
+        add("ROT13 decoding (normalized)", rot13(current))
+
+    # Recursive decoding: base64 of hex, hex of base64, and so on. Bounded
+    # depth keeps this from becoming a decompression bomb.
+    def decode_layer(source: str, depth: int, trail: str) -> None:
+        if depth <= 0 or len(views) >= max_views:
+            return
+        for label, decoder in (
+            ("base64", extract_base64_payloads),
+            ("hex", extract_hex_payloads),
+        ):
+            for decoded in decoder(source):
+                path = f"{trail}->{label}" if trail else label
+                add(f"{path}-decoded payload", decoded)
+                add(f"{path}-decoded + normalized", deleetify(normalize_unicode(decoded)))
+                # ROT13 inside an encoded wrapper is a common double-wrap
+                # ("base64 of ROT13"); it is an involution so it never
+                # appears in the cumulative chain above and must be tried
+                # explicitly on each decoded layer.
+                add(f"{path}-decoded + ROT13", rot13(decoded))
+                decode_layer(decoded, depth - 1, path)
+
+    decode_layer(text, 3, "")
+    if current != text:
+        decode_layer(current, 2, "normalized")
+
+    return views
 
 
 def extract_hex_payloads(text: str, max_segments: int = 5) -> List[str]:

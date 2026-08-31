@@ -6,6 +6,7 @@ from .text_normalize import (
     extract_base64_payloads,
     extract_hex_payloads,
     normalize_unicode,
+    normalization_views,
     rot13,
     strip_zero_width,
 )
@@ -41,8 +42,11 @@ class PromptInjectionDetector:
         r"(無視|むし|忘れ)(して)?\s*(前の|以前の|すべての|全ての)?\s*(指示|命令|ルール)",
         r"(システムプロンプト|初期指示)\s*(を)?\s*(教えて|表示|出力)",
         # Korean: 이전 지시 무시 / 시스템 프롬프트 알려줘
-        r"(이전|모든)\s*(지시|명령|규칙)\s*(을|를)?\s*(무시|잊어)",
-        r"(시스템\s*프롬프트|초기\s*지시)\s*(을|를)?\s*(알려|보여|출력)",
+        # 지침 (guideline) is at least as common as 지시 (instruction) in this
+        # phrasing, and the object marker may be followed by 모두/전부 before
+        # the verb — "이전 지침을 모두 무시하고" matched neither before.
+        r"(이전|이전의|모든|위의|앞의)\s*(지시|지침|명령|규칙|안내)\s*(사항)?\s*(을|를|은|는)?\s*(모두|전부|다)?\s*(무시|잊어|잊고|버리)",
+        r"(시스템\s*프롬프트|초기\s*(지시|지침)|시스템\s*(지시|메시지))\s*(을|를)?\s*(알려|보여|출력|표시|공개)",
         # French: ignorez/oubliez + instructions/consignes ; révélez + prompt système
         r"(?i)(ignore[zr]?|oublie[zr]?|negligez|passe[zr]?\s+outre)\s+(toutes?\s+)?(les\s+)?(instructions?|consignes?|regles?|directives?)\s*(precedentes?|anterieures?|ci-dessus)?",
         r"(?i)(revele[zr]?|montre[zr]?|affiche[zr]?|donne[zr]?)\s+(moi\s+)?(ton|votre|le)\s+(prompt\s+syst|instructions?\s+initiales?|message\s+syst)",
@@ -106,45 +110,14 @@ class PromptInjectionDetector:
         if result:
             return result
 
-        # 2-N. Alternate views of the same text. Each transform is a cheap,
-        # widely-used obfuscation that leaves the payload fully legible to
-        # the model while breaking literal keyword matching. They are
-        # checked in addition to the raw text, never instead of it.
-        views = [
-            ("unicode/homoglyph normalization", normalize_unicode(clean_text)),
-            ("zero-width stripping", strip_zero_width(clean_text)),
-            ("leetspeak normalization", deleetify(clean_text)),
-            ("spaced-letter collapse", collapse_spaced_letters(clean_text)),
-            ("ROT13 decoding", rot13(clean_text)),
-            ("unicode + zero-width normalization", normalize_unicode(strip_zero_width(clean_text))),
-        ]
-        # Spaced-out text is often also leetspoken; check the combination.
-        collapsed = collapse_spaced_letters(strip_zero_width(clean_text))
-        views.append(("spaced-letter collapse", deleetify(collapsed)))
-
-        for label, view in views:
-            if view == clean_text:
-                continue
+        # 2. Alternate readings of the same text. Obfuscations compose, so
+        # these are built by applying normalizers cumulatively and decoding
+        # encoded payloads recursively — see normalization_views().
+        for label, view in normalization_views(clean_text):
             result = self._scan(view)
             if result:
                 result["reason"] += f" [via {label}]"
                 return result
-
-        # Encoded payloads — inspect what the model will actually decode and
-        # see, not just the encoded wrapper the raw regex sees.
-        for label, decoder in (
-            ("base64-decoded payload", extract_base64_payloads),
-            ("hex-decoded payload", extract_hex_payloads),
-        ):
-            for decoded in decoder(clean_text):
-                result = (
-                    self._scan(decoded)
-                    or self._scan(deleetify(decoded))
-                    or self._scan(rot13(decoded))
-                )
-                if result:
-                    result["reason"] += f" [via {label}]"
-                    return result
 
         return {
             "detected": False,

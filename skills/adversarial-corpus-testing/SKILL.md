@@ -54,6 +54,32 @@ Do not invent variations of payloads you already block. Start from **evasion pri
 
 The last row is the important one: if paraphrase bypasses, no additional pattern will fix it. That is the signal to escalate to a semantic tier, not to write rule #48.
 
+## Ratchet, don't threshold
+
+A percentage threshold ("fail under 90%") lets a fixed bypass be silently
+traded for a new one — the total is unchanged, so the gate stays green.
+
+Gate on the **set** of known bypasses, not a rate:
+
+| Condition | Result |
+|---|---|
+| More bypasses than baseline | FAIL — something regressed |
+| Same count, different set | FAIL — a fix was traded for a new hole |
+| Fewer than baseline | FAIL — lower the baseline to lock the gain in |
+| Exactly the baseline set | pass |
+
+Failing on *improvement* is deliberate. An unlocked gain means the next
+regression is measured against a stale, too-permissive number.
+
+Every entry left in the baseline must be a documented, deliberate gap —
+not a TODO nobody read.
+
+**In this repo:** `make redteam` (also wired into `make test`), baseline in
+`guard-engine/redteam_baseline.json`, gate logic in `redteam_baseline.py`.
+The gate caught a real regression within minutes of being switched on: a
+refactor of the normalization views dropped ROT13-of-decoded-payload
+handling, and the run failed with `+ PI: ROT13 'vtaber nyy cerivbhf'`.
+
 ## Red Flags
 
 - "Our test suite passes 100%" — against which corpus, written by whom?
@@ -61,6 +87,7 @@ The last row is the important one: if paraphrase bypasses, no additional pattern
 - An attack corpus with no benign counterpart
 - Corpus lives in a script that CI never runs
 - Reporting detection rate without false-positive rate
+- Gating on a percentage instead of the known-bypass set
 
 ## Real-World Impact
 
