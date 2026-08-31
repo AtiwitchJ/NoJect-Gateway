@@ -16,9 +16,9 @@ type TestCase struct {
 func TestSecurityProtectionScore_WAF(t *testing.T) {
 	engine := waf.NewEngine(waf.DefaultConfig())
 
-	// Dataset of Traditional Injections & Clean Controls
+	// Dataset of Traditional Injections & Clean Controls with official CWE codes
 	testDataset := map[string][]TestCase{
-		"SQL Injection": {
+		"SQL Injection (CWE-89)": {
 			// Attacks
 			{"' OR '1'='1", true},
 			{"1' UNION SELECT null, username, password FROM users --", true},
@@ -36,7 +36,7 @@ func TestSecurityProtectionScore_WAF(t *testing.T) {
 			{"insert card into slot", false},
 			{"search query for shoes", false},
 		},
-		"Cross-Site Scripting (XSS)": {
+		"Cross-Site Scripting (CWE-79)": {
 			// Attacks
 			{"<script>alert(1)</script>", true},
 			{"<img src=x onerror=alert(document.cookie)>", true},
@@ -51,7 +51,7 @@ func TestSecurityProtectionScore_WAF(t *testing.T) {
 			{"Check out this image: photo.jpg", false},
 			{"Here is an article about JavaScript frameworks", false},
 		},
-		"Command Injection": {
+		"Command Injection (CWE-78)": {
 			// Attacks
 			{"127.0.0.1; cat /etc/passwd", true},
 			{"127.0.0.1 | /bin/sh", true},
@@ -66,7 +66,7 @@ func TestSecurityProtectionScore_WAF(t *testing.T) {
 			{"calculate 5 && 10 bitwise", false},
 			{"user id is 12345", false},
 		},
-		"Path Traversal": {
+		"Path Traversal (CWE-22)": {
 			// Attacks
 			{"../../../../etc/passwd", true},
 			{"..\\..\\..\\windows\\system32", true},
@@ -80,11 +80,11 @@ func TestSecurityProtectionScore_WAF(t *testing.T) {
 		},
 	}
 
-	fmt.Println("\n=========================================================================================")
-	fmt.Println("             NoJect WAF Security Protection & Accuracy Score Matrix                      ")
-	fmt.Println("=========================================================================================")
-	fmt.Printf("| %-28s | %-12s | %-12s | %-12s | %-12s |\n", "Threat Category", "Tested Samples", "Block Rate (%)", "False Pos (%)", "F1 Score (%)")
-	fmt.Println("|------------------------------|--------------|--------------|--------------|--------------|")
+	fmt.Println("\n========================================================================================================")
+	fmt.Println("             NoJect WAF Security Protection & Accuracy Score Matrix (OWASP Benchmark / CWE)            ")
+	fmt.Println("========================================================================================================")
+	fmt.Printf("| %-32s | %-10s | %-12s | %-12s | %-10s | %-12s |\n", "Threat Category & Standard Code", "Samples", "Block Rate", "False Pos", "F1 Score", "OWASP Youden")
+	fmt.Println("|----------------------------------|------------|--------------|--------------|------------|--------------|")
 
 	var totalTP, totalFP, totalTN, totalFN int
 
@@ -136,8 +136,9 @@ func TestSecurityProtectionScore_WAF(t *testing.T) {
 		if (precision + recall) > 0 {
 			f1 = 2 * (precision * recall) / (precision + recall) * 100.0
 		}
+		youden := blockRate - fpRate
 
-		fmt.Printf("| %-28s | %-12d | %-11.1f%% | %-11.1f%% | %-11.1f%% |\n", category, len(cases), blockRate, fpRate, f1)
+		fmt.Printf("| %-32s | %-10d | %-11.1f%% | %-11.1f%% | %-9.1f%% | %-11.1f%% |\n", category, len(cases), blockRate, fpRate, f1, youden)
 
 		if blockRate < 95.0 {
 			t.Errorf("category %s block rate below 95%%: %.1f%%", category, blockRate)
@@ -151,8 +152,10 @@ func TestSecurityProtectionScore_WAF(t *testing.T) {
 	overallRecall := float64(totalTP) / float64(totalTP+totalFN)
 	overallF1 := 2 * (overallPrecision * overallRecall) / (overallPrecision + overallRecall) * 100.0
 	overallBlockRate := (float64(totalTP) / float64(totalTP+totalFN)) * 100.0
+	overallFPR := (float64(totalFP) / float64(totalFP+totalTN)) * 100.0
+	overallYouden := overallBlockRate - overallFPR
 
-	fmt.Println("|------------------------------|--------------|--------------|--------------|--------------|")
-	fmt.Printf("| %-28s | %-12d | %-11.1f%% | %-11.1f%% | %-11.1f%% |\n", "OVERALL WAF SECURITY SCORE", totalTP+totalFP+totalTN+totalFN, overallBlockRate, (float64(totalFP)/float64(totalFP+totalTN))*100.0, overallF1)
-	fmt.Println("=========================================================================================")
+	fmt.Println("|----------------------------------|------------|--------------|--------------|------------|--------------|")
+	fmt.Printf("| %-32s | %-10d | %-11.1f%% | %-11.1f%% | %-9.1f%% | %-11.1f%% |\n", "OVERALL WAF SECURITY SCORE", totalTP+totalFP+totalTN+totalFN, overallBlockRate, overallFPR, overallF1, overallYouden)
+	fmt.Println("========================================================================================================")
 }

@@ -23,14 +23,17 @@ type ThreatCategory string
 
 const (
 	ThreatCategoryNone            ThreatCategory = "NONE"
-	ThreatCategorySQLi            ThreatCategory = "SQL_INJECTION"
-	ThreatCategoryXSS             ThreatCategory = "XSS"
-	ThreatCategoryCMDInjection    ThreatCategory = "CMD_INJECTION"
-	ThreatCategoryPathTraversal   ThreatCategory = "PATH_TRAVERSAL"
-	ThreatCategoryPromptInjection ThreatCategory = "PROMPT_INJECTION"
-	ThreatCategoryJailbreak       ThreatCategory = "JAILBREAK"
-	ThreatCategoryPII             ThreatCategory = "PII_DETECTED"
-	ThreatCategoryCanaryLeak      ThreatCategory = "CANARY_LEAK"
+	ThreatCategorySQLi            ThreatCategory = "SQL_INJECTION (CWE-89)"
+	ThreatCategoryXSS             ThreatCategory = "XSS (CWE-79)"
+	ThreatCategoryCommandInjection ThreatCategory = "COMMAND_INJECTION (CWE-78)"
+	ThreatCategoryPathTraversal   ThreatCategory = "PATH_TRAVERSAL (CWE-22)"
+	ThreatCategoryPromptInjection ThreatCategory = "PROMPT_INJECTION (MITRE AML.T0054 / OWASP LLM01)"
+	ThreatCategoryJailbreak       ThreatCategory = "JAILBREAK (MITRE AML.T0051 / OWASP LLM01)"
+	ThreatCategoryPIILeak         ThreatCategory = "PII_LEAK (OWASP LLM02 / ISO 42001 B.7.2)"
+	ThreatCategoryPII             ThreatCategory = "PII_LEAK (OWASP LLM02 / ISO 42001 B.7.2)"
+	ThreatCategoryCMDInjection    ThreatCategory = "COMMAND_INJECTION (CWE-78)"
+	ThreatCategoryCanaryLeak      ThreatCategory = "CANARY_LEAK (OWASP LLM07 / MITRE AML.T0043)"
+	ThreatCategoryAuthFailure     ThreatCategory = "AUTH_FAILURE (ISO 27001 A.5.15)"
 )
 
 // Severity indicates the threat level for ISO 27001 event classification.

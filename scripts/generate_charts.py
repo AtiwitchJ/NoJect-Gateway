@@ -62,8 +62,8 @@ def generate_security_chart():
     ax.grid(axis='x', linestyle='--', alpha=0.25, color="#475569")
     ax.legend(loc="lower right", facecolor="#1e293b", edgecolor="#334155", fontsize=12, labelcolor=text_color)
 
-    # Add subtitle badge
-    fig.text(0.5, 0.02, "ISO/IEC 27001 • ISO/IEC 42001 Compliant | 0.0% False Positive Rate across all 90 benchmark test cases", ha='center', fontsize=11, color=muted_color, fontstyle='italic')
+    # Add subtitle badge with official international standards
+    fig.text(0.5, 0.02, "Standards: MITRE ATLAS™ (AML.T0054/T0051) • OWASP Top 10 for LLM (LLM01/02) • ISO/IEC 42001 (B.5.3/B.7.2) • OWASP Youden Index: 100.0%", ha='center', fontsize=10.5, color=muted_color, fontweight='bold')
 
     plt.tight_layout(rect=[0, 0.04, 1, 0.96])
     out_path = "docs/assets/security_matrix_chart.png"

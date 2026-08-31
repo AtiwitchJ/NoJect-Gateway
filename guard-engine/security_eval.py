@@ -36,9 +36,10 @@ def evaluate_dataset(name, detect_fn, attacks, clean_samples):
     precision = (tp / (tp + fp)) if (tp + fp) > 0 else 1.0
     recall = (tp / (tp + fn)) if (tp + fn) > 0 else 1.0
     f1 = (2 * precision * recall / (precision + recall) * 100) if (precision + recall) > 0 else 0.0
+    youden_index = block_rate - fp_rate  # Standard OWASP Youden Index: TPR - FPR
 
-    print(f"| {name:<30} | {total:>12} | {block_rate:>11.1f}% | {fp_rate:>11.1f}% | {f1:>11.1f}% |")
-    return {"name": name, "total": total, "block_rate": block_rate, "fp_rate": fp_rate, "f1": f1}
+    print(f"| {name:<38} | {total:>8} | {block_rate:>10.1f}% | {fp_rate:>10.1f}% | {f1:>9.1f}% | {youden_index:>11.1f}% |")
+    return {"name": name, "total": total, "block_rate": block_rate, "fp_rate": fp_rate, "f1": f1, "youden": youden_index}
 
 def main():
     pi_detector = PromptInjectionDetector()
@@ -46,11 +47,11 @@ def main():
     pii_masker = PIIMasker()
     canary_shield = CanaryShield()
 
-    print("\n" + "=" * 91)
-    print("             NoJect AI Guardrail Security Protection & Accuracy Score Matrix               ")
-    print("=" * 91)
-    print(f"| {'AI Threat Category':<30} | {'Test Samples':>12} | {'Block Rate':>12} | {'False Pos':>12} | {'F1 Score':>12} |")
-    print("|" + "-" * 32 + "|" + "-" * 14 + "|" + "-" * 14 + "|" + "-" * 14 + "|" + "-" * 14 + "|")
+    print("\n" + "=" * 115)
+    print("      NoJect Security Protection Score Matrix (Official OWASP / MITRE ATLAS / ISO 42001)       ")
+    print("=" * 115)
+    print(f"| {'Threat Vector & Standard Code':<38} | {'Samples':>8} | {'Block Rate':>11} | {'False Pos':>11} | {'F1 Score':>10} | {'OWASP Youden':>12} |")
+    print("|" + "-" * 40 + "|" + "-" * 10 + "|" + "-" * 13 + "|" + "-" * 13 + "|" + "-" * 12 + "|" + "-" * 14 + "|")
 
     # 1. Prompt Injection Dataset
     pi_attacks = [
@@ -75,7 +76,7 @@ def main():
         "Can you translate 'hello friend' to Japanese?",
         "What is the difference between TCP and UDP protocols?",
     ]
-    res_pi = evaluate_dataset("Prompt Injection (LLM01)", pi_detector.detect, pi_attacks, pi_clean)
+    res_pi = evaluate_dataset("Prompt Injection (MITRE AML.T0054 / OWASP LLM01)", pi_detector.detect, pi_attacks, pi_clean)
 
     # 2. Jailbreak Dataset
     jb_attacks = [
@@ -96,7 +97,7 @@ def main():
         "Explain the concept of roleplay in video games.",
         "How do software frameworks implement authentication?",
     ]
-    res_jb = evaluate_dataset("Jailbreak / Persona Bypass", jb_detector.detect, jb_attacks, jb_clean)
+    res_jb = evaluate_dataset("Jailbreak Evasion (MITRE AML.T0051 / LLM01)", jb_detector.detect, jb_attacks, jb_clean)
 
     # 3. PII Masking Dataset
     pii_samples = [
@@ -113,7 +114,7 @@ def main():
         "We are launching our product in Q3 2026.",
         "The meeting starts at 10:00 AM in room 404.",
     ]
-    res_pii = evaluate_dataset("PII Masking & Privacy (B.7.2)", pii_masker.mask, pii_samples, pii_clean)
+    res_pii = evaluate_dataset("PII Masking (ISO 42001 B.7.2 / OWASP LLM02)", pii_masker.mask, pii_samples, pii_clean)
 
     # 4. Canary Shield
     canaries = ["CANARY_SECRET_XYZ", "SECRET_KEY_123"]
@@ -125,18 +126,19 @@ def main():
         "Here is the standard assistant output with no internal secrets.",
         "The weather forecast for tomorrow is sunny with light clouds.",
     ]
-    res_canary = evaluate_dataset("Canary Secret Leak Shield", lambda s: canary_shield.inspect(s, canaries), canary_attacks, canary_clean)
+    res_canary = evaluate_dataset("Canary Shield (MITRE AML.T0043 / LLM07)", lambda s: canary_shield.inspect(s, canaries), canary_attacks, canary_clean)
 
     # Overall Summary
     total_evals = [res_pi, res_jb, res_pii, res_canary]
     avg_block_rate = sum(r["block_rate"] for r in total_evals) / len(total_evals)
     avg_fp_rate = sum(r["fp_rate"] for r in total_evals) / len(total_evals)
     avg_f1 = sum(r["f1"] for r in total_evals) / len(total_evals)
+    avg_youden = sum(r["youden"] for r in total_evals) / len(total_evals)
     total_samples = sum(r["total"] for r in total_evals)
 
-    print("|" + "-" * 32 + "|" + "-" * 14 + "|" + "-" * 14 + "|" + "-" * 14 + "|" + "-" * 14 + "|")
-    print(f"| {'OVERALL AI SAFETY SCORE':<30} | {total_samples:>12} | {avg_block_rate:>11.1f}% | {avg_fp_rate:>11.1f}% | {avg_f1:>11.1f}% |")
-    print("=" * 91 + "\n")
+    print("|" + "-" * 40 + "|" + "-" * 10 + "|" + "-" * 13 + "|" + "-" * 13 + "|" + "-" * 12 + "|" + "-" * 14 + "|")
+    print(f"| {'OVERALL NOJECT AI SAFETY SCORE':<38} | {total_samples:>8} | {avg_block_rate:>10.1f}% | {avg_fp_rate:>10.1f}% | {avg_f1:>9.1f}% | {avg_youden:>11.1f}% |")
+    print("=" * 115 + "\n")
 
 if __name__ == "__main__":
     main()
