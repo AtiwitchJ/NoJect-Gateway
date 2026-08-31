@@ -2,147 +2,161 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Build NoJect, a high-performance open-source Universal Security and AI API Gateway with multi-auth, fast-path WAF, AI prompt injection & jailbreak detection, and ISO 27001/42001 tamper-evident audit logging.
+**Goal:** Build and thoroughly verify NoJect, a high-performance, ISO-compliant Universal AI and Security API Gateway in Go and Python.
 
-**Architecture:** 
-- **Go Gateway Core**: Handles HTTP/HTTPS ingress, multi-auth (API Key, JWT, HMAC), rate limiting, sub-millisecond WAF (SQLi, XSS, CMD), dynamic reverse proxy routing, and cryptographic hash-chained audit logging.
-- **Python Guard Engine**: Handles AI-specific safety inspection via gRPC (Prompt Injection, Jailbreak heuristics/classifiers, PII anonymization, System Prompt leak prevention).
+**Architecture:** Go provides high-speed L7 reverse proxying, multi-auth, and sub-2ms WAF rules; Python provides AI guardrails (Prompt Injection, Jailbreak, PII masking) via IPC/gRPC; all requests are tracked with ISO 27001 tamper-evident hash-chained audit logging.
 
-**Tech Stack:** Go 1.22+, Python 3.11+, gRPC/Protobuf, YAML configs, Docker Compose.
+**Tech Stack:** Go 1.25, Python 3.10+, gRPC/Protobuf, YAML configuration, Docker Compose.
 
 ## Global Constraints
-- Target workspace: `/Users/up-mac/wokrspace/mind/NoJect`
-- Clean module boundaries: Go gateway in `internal/`, Python guard in `guard-engine/`, Shared contracts in `proto/`.
-- Full ISO compliance features: structured audit logs with SHA-256 hash chains, RBAC, explainable guardrail decisions.
-- Zero external cloud dependencies required for local deployment.
+- ISO/IEC 27001:2022 (ISMS) compliance for Auth, Audit Logging & Tamper Evidence
+- ISO/IEC 42001:2023 (AIMS) compliance for Prompt Injection & AI Safety Guardrails
+- ISO/IEC 27034 compliance for Application Security and Input Validation
+- Sub-2ms fast-path WAF inspection latency overhead
+- Every component must have comprehensive unit & integration tests
 
 ---
 
-### Task 1: Repository Foundation & Protobuf Definitions
+### Task 1: Scaffolding, Go Module & Protobuf/IPC Contract
 **Files:**
-- Create: `proto/guard.proto`
 - Create: `go.mod`
+- Create: `proto/guard.proto`
 - Create: `guard-engine/requirements.txt`
 - Create: `Makefile`
 
-- [ ] **Step 1: Write Protobuf Schema**
-- [ ] **Step 2: Initialize Go Module & Python Virtualenv Requirements**
-- [ ] **Step 3: Setup Makefile for code generation and testing**
-- [ ] **Step 4: Generate Go and Python gRPC bindings**
-- [ ] **Step 5: Commit baseline**
+**Interfaces:**
+- Produces: `guard.proto` defining `InspectRequest`, `InspectResponse`, `InspectOutputRequest`, `InspectOutputResponse`
+
+- [ ] **Step 1: Create Go module and dependencies**
+- [ ] **Step 2: Create proto definition for Guard service**
+- [ ] **Step 3: Setup Python requirements and Makefile**
+- [ ] **Step 4: Commit**
 
 ---
 
-### Task 2: Python AI Guard Engine
-**Files:**
-- Create: `guard-engine/detectors/prompt_injection.py`
-- Create: `guard-engine/detectors/jailbreak.py`
-- Create: `guard-engine/detectors/pii_masker.py`
-- Create: `guard-engine/detectors/canary_shield.py`
-- Create: `guard-engine/server.py`
-- Create: `guard-engine/tests/test_detectors.py`
-
-- [ ] **Step 1: Write failing detector unit tests**
-- [ ] **Step 2: Implement Prompt Injection & Jailbreak Detectors**
-- [ ] **Step 3: Implement PII Masker (Thai ID, Phone, Email, Credit Cards, API Keys)**
-- [ ] **Step 4: Implement Canary & Output Shield**
-- [ ] **Step 5: Implement gRPC Server handling InspectRequest & InspectResponse**
-- [ ] **Step 6: Run pytest and verify all tests pass**
-- [ ] **Step 7: Commit Python Guard Engine**
-
----
-
-### Task 3: Go ISO 27001 Tamper-Evident Audit Logging Subsystem
-**Files:**
-- Create: `internal/audit/logger.go`
-- Create: `internal/audit/verifier.go`
-- Create: `internal/audit/logger_test.go`
-
-- [ ] **Step 1: Write failing audit logger and hash chain tests**
-- [ ] **Step 2: Implement AuditLogger with SHA-256 hash-chaining and JSON output**
-- [ ] **Step 3: Implement LogVerifier to validate chain integrity**
-- [ ] **Step 4: Run Go test to verify all tests pass**
-- [ ] **Step 5: Commit Audit Subsystem**
-
----
-
-### Task 4: Go Fast-Path WAF Subsystem
-**Files:**
-- Create: `internal/waf/engine.go`
-- Create: `internal/waf/engine_test.go`
-
-- [ ] **Step 1: Write failing WAF tests for SQLi, XSS, and CMD injection**
-- [ ] **Step 2: Implement fast WAF rule engine with regex and tokenizer**
-- [ ] **Step 3: Run Go tests and verify latency and detection accuracy**
-- [ ] **Step 4: Commit WAF Subsystem**
-
----
-
-### Task 5: Go Multi-Auth Subsystem
+### Task 2: Multi-Auth Subsystem (Go)
 **Files:**
 - Create: `internal/auth/auth.go`
 - Create: `internal/auth/apikey.go`
 - Create: `internal/auth/jwt.go`
 - Create: `internal/auth/hmac.go`
-- Create: `internal/auth/auth_test.go`
+- Test: `internal/auth/auth_test.go`
 
-- [ ] **Step 1: Write failing Multi-Auth tests**
-- [ ] **Step 2: Implement API Key, JWT (RSA/ECDSA), and HMAC validators**
-- [ ] **Step 3: Run Go test to verify all auth providers**
-- [ ] **Step 4: Commit Auth Subsystem**
+**Interfaces:**
+- Produces: `Authenticator` interface with `Authenticate(r *http.Request) (*AuthContext, error)`
+
+- [ ] **Step 1: Write failing tests for API Key, JWT and HMAC authentication**
+- [ ] **Step 2: Run tests to verify failure**
+- [ ] **Step 3: Implement Multi-Auth engine**
+- [ ] **Step 4: Run tests and verify 100% pass**
+- [ ] **Step 5: Commit**
 
 ---
 
-### Task 6: Go Upstream Router & Reverse Proxy Engine
+### Task 3: Fast-Path WAF Engine (Go)
 **Files:**
-- Create: `internal/guardclient/client.go`
-- Create: `internal/router/router.go`
-- Create: `internal/router/router_test.go`
+- Create: `internal/waf/waf.go`
+- Create: `internal/waf/sqli.go`
+- Create: `internal/waf/xss.go`
+- Create: `internal/waf/cmd_injection.go`
+- Test: `internal/waf/waf_test.go`
 
-- [ ] **Step 1: Write failing router and proxy tests**
-- [ ] **Step 2: Implement gRPC Guard Client with circuit breaker & fallback**
-- [ ] **Step 3: Implement Reverse Proxy with middleware chain (Auth -> WAF -> AI Guard -> Upstream -> Output Guard -> Audit)**
-- [ ] **Step 4: Run Go tests and verify pipeline execution**
-- [ ] **Step 5: Commit Router & Proxy Subsystem**
+**Interfaces:**
+- Produces: `WAFEngine` with `Inspect(method, path, query string, headers http.Header, body []byte) (*WAFResult, error)`
+
+- [ ] **Step 1: Write failing tests for SQLi, XSS, CMD Injection, Path Traversal and false-positive checks**
+- [ ] **Step 2: Run tests to verify failure**
+- [ ] **Step 3: Implement WAF engine**
+- [ ] **Step 4: Run tests and verify all attack vectors detected and clean inputs passed**
+- [ ] **Step 5: Commit**
 
 ---
 
-### Task 7: Declarative Configuration & Gateway Main Entrypoint
+### Task 4: ISO/IEC 27001 Tamper-Evident Audit Logger (Go)
+**Files:**
+- Create: `internal/audit/logger.go`
+- Create: `internal/audit/hash_chain.go`
+- Create: `internal/audit/verifier.go`
+- Test: `internal/audit/logger_test.go`
+
+**Interfaces:**
+- Produces: `AuditLogger` with `LogEvent(event AuditEvent)` and `VerifyChain(logFilePath string) (bool, int, error)`
+
+- [ ] **Step 1: Write failing tests for audit record logging, hash-chain generation, and tamper detection**
+- [ ] **Step 2: Run tests to verify failure**
+- [ ] **Step 3: Implement AuditLogger and Verifier**
+- [ ] **Step 4: Run tests and verify tamper detection on modified logs**
+- [ ] **Step 5: Commit**
+
+---
+
+### Task 5: Python AI Safety & Guardrail Engine
+**Files:**
+- Create: `guard-engine/server.py`
+- Create: `guard-engine/detectors/prompt_injection.py`
+- Create: `guard-engine/detectors/jailbreak.py`
+- Create: `guard-engine/detectors/pii_masker.py`
+- Create: `guard-engine/detectors/canary_shield.py`
+- Test: `guard-engine/tests/test_guard.py`
+
+**Interfaces:**
+- Produces: AI Guard Service exposing inspection endpoints for Prompt Injection, Jailbreak, PII Masking, and Canary Tokens.
+
+- [ ] **Step 1: Write failing tests for AI Guard detectors**
+- [ ] **Step 2: Run tests to verify failure**
+- [ ] **Step 3: Implement Prompt Injection, Jailbreak, PII Masker, and Canary Shield detectors**
+- [ ] **Step 4: Run tests and verify passes**
+- [ ] **Step 5: Commit**
+
+---
+
+### Task 6: Upstream Router, Guard Client & Reverse Proxy (Go)
+**Files:**
+- Create: `internal/router/router.go`
+- Create: `internal/router/proxy.go`
+- Create: `internal/guardclient/client.go`
+- Test: `internal/router/router_test.go`
+
+**Interfaces:**
+- Consumes: `auth.Authenticator`, `waf.WAFEngine`, `audit.AuditLogger`, `guardclient.Client`
+- Produces: `http.Handler` for routing and proxying requests to LLMs or REST backends.
+
+- [ ] **Step 1: Write failing integration tests with mock upstreams**
+- [ ] **Step 2: Run tests to verify failure**
+- [ ] **Step 3: Implement pipeline, guard client and reverse proxy**
+- [ ] **Step 4: Run tests and verify end-to-end pipeline**
+- [ ] **Step 5: Commit**
+
+---
+
+### Task 7: Gateway Daemon & Configuration Subsystem (Go)
 **Files:**
 - Create: `internal/config/config.go`
-- Create: `internal/config/config_test.go`
 - Create: `cmd/gateway/main.go`
+- Test: `internal/config/config_test.go`
 - Create: `configs/gateway.yaml`
 
-- [ ] **Step 1: Write Config loader and validator tests**
-- [ ] **Step 2: Implement YAML config loader with environment variable interpolation**
-- [ ] **Step 3: Implement Gateway `main.go` with signal handling and graceful shutdown**
-- [ ] **Step 4: Verify gateway runs and starts up cleanly**
-- [ ] **Step 5: Commit Gateway Entrypoint**
+**Interfaces:**
+- Produces: Executable binary `noject-gateway` running the server with loaded configs.
+
+- [ ] **Step 1: Write failing tests for YAML config parsing and validation**
+- [ ] **Step 2: Implement config loader and main entrypoint with graceful shutdown**
+- [ ] **Step 3: Verify binary builds and runs**
+- [ ] **Step 4: Commit**
 
 ---
 
-### Task 8: End-to-End Integration Testing & Deployment Scaffolding
+### Task 8: End-to-End Integration, Dockerization & ISO Compliance Docs
 **Files:**
-- Create: `tests/e2e/e2e_test.go`
 - Create: `deployments/docker-compose.yml`
 - Create: `deployments/Dockerfile.gateway`
 - Create: `deployments/Dockerfile.guard`
-
-- [ ] **Step 1: Implement full E2E test suite covering LLM and REST proxy routes**
-- [ ] **Step 2: Create Dockerfiles and Docker Compose specification**
-- [ ] **Step 3: Execute E2E integration test suite**
-- [ ] **Step 4: Commit E2E and Deployment assets**
-
----
-
-### Task 9: ISO Compliance Documentation & Open Source Release Assets
-**Files:**
-- Create: `docs/ISO_COMPLIANCE.md`
 - Create: `docs/QUICKSTART.md`
-- Create: `README.md`
+- Create: `docs/ISO_COMPLIANCE.md`
+- Test: `tests/e2e_test.go`
 
-- [ ] **Step 1: Write ISO 27001, 42001, and 27034 Compliance Mapping Guide**
-- [ ] **Step 2: Write Quickstart and Developer Setup Guides**
-- [ ] **Step 3: Write comprehensive project README.md**
-- [ ] **Step 4: Final verification and commit**
+- [ ] **Step 1: Implement full E2E test suite covering LLM and REST workflows**
+- [ ] **Step 2: Run complete test suite across Go and Python**
+- [ ] **Step 3: Create Docker Compose and Dockerfiles**
+- [ ] **Step 4: Write documentation and verify all ISO controls**
+- [ ] **Step 5: Final commit & Verification Summary**
