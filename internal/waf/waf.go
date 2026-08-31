@@ -74,6 +74,10 @@ var (
 	// underneath goes invisible to every downstream signature check.
 	sqlVersionedComment = regexp.MustCompile(`/\*!\d*(.*?)\*/`)
 	sqlInlineComment    = regexp.MustCompile(`/\*.*?\*/`)
+	// NUL and other C0 control characters (except \t \n \r) are stripped:
+	// several downstream parsers drop them silently, so "<scr\x00ipt>"
+	// reaches the browser as "<script>" while defeating naive matching here.
+	controlChars = regexp.MustCompile(`[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]`)
 )
 
 // normalizeInput unescapes URL/HTML encoding to a fixed point and strips
@@ -99,6 +103,9 @@ func normalizeInput(raw string) string {
 	// matchable keywords instead of hiding the payload.
 	decoded = sqlVersionedComment.ReplaceAllString(decoded, " $1 ")
 	decoded = sqlInlineComment.ReplaceAllString(decoded, " ")
+	// Drop embedded control characters last, so a NUL planted mid-keyword
+	// cannot split a token that the downstream parser will see intact.
+	decoded = controlChars.ReplaceAllString(decoded, "")
 	return decoded
 }
 
@@ -138,13 +145,23 @@ func (e *Engine) Inspect(method, path, query string, headers http.Header, body [
 	// ";"/"|"/"&&" — track this with the false-positive corpus test (see
 	// design spec §8) rather than by blinding the check to the body.
 	if e.config.EnableCMDInjection {
-		if res := checkCommandInjection(normQuery); res != nil {
+		// Path, query and headers get the strict syntax-level rules: shell
+		// metacharacters have no legitimate use there, so a separator
+		// followed by a command token is an attack regardless of which
+		// binary is named.
+		if res := checkCommandInjectionStrict(normPath); res != nil {
 			return res
 		}
+		if res := checkCommandInjectionStrict(normQuery); res != nil {
+			return res
+		}
+		if res := scanHeaders(headers, checkCommandInjectionStrict); res != nil {
+			return res
+		}
+		// Bodies keep the narrower named-binary rules — prose and code
+		// legitimately contain ";" and "|", so the strict rule would
+		// misfire on ordinary content.
 		if res := checkCommandInjection(normBody); res != nil {
-			return res
-		}
-		if res := scanHeaders(headers, checkCommandInjection); res != nil {
 			return res
 		}
 	}

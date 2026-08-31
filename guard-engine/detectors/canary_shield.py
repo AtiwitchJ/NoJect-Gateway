@@ -64,10 +64,30 @@ class CanaryShield:
 
         return views
 
+    # A canary is a secret the model should never emit. Disclosing a
+    # substantial prefix of it is already a breach — the attacker can often
+    # obtain the remainder, and the leak proves the model is reciting
+    # protected context. Require enough characters that ordinary text cannot
+    # collide with it by chance.
+    _MIN_PARTIAL_LEN = 12
+
     def _find_leak(self, token: str, response_text: str) -> Optional[str]:
         """Return a short label for how the token leaked, or None."""
         if token in response_text:
             return "verbatim"
+
+        # Reversed disclosure: asking a model to "spell it backwards" is a
+        # standard way to smuggle a secret past an exact-match filter.
+        reversed_token = token[::-1]
+        if reversed_token in response_text:
+            return "reversed"
+
+        # Partial disclosure of a long-enough prefix/suffix.
+        if len(token) > self._MIN_PARTIAL_LEN:
+            if token[: self._MIN_PARTIAL_LEN] in response_text:
+                return "partial (prefix)"
+            if token[-self._MIN_PARTIAL_LEN :] in response_text:
+                return "partial (suffix)"
 
         stripped_token = self._SEPARATORS.sub("", token)
         for view in self._decoded_views(response_text):

@@ -36,18 +36,37 @@ class PIIMasker:
     Aligned with ISO/IEC 42001 AI Data Privacy & Protection (Control B.7.2).
     """
 
-    # Regex definitions for PII
+    # Regex definitions for PII.
+    #
+    # ORDER MATTERS: patterns are applied in sequence and each replaces the
+    # text it matched, so the most specific patterns must run first. API keys
+    # contain long digit runs, and a numeric pattern running earlier would
+    # consume part of the key and leave the rest exposed
+    # ("sk-proj-[REDACTED_PHONE]abcdef") instead of redacting the secret.
     PATTERNS: List[Tuple[str, str, str]] = [
+        # API Keys and Secrets — first: most specific, and the highest-impact
+        # thing to lose.
+        ("API_KEY", r"\b(sk-[a-zA-Z0-9_-]{20,}|ghp_[a-zA-Z0-9]{36}|AKIA[0-9A-Z]{16})\b", "[REDACTED_API_KEY]"),
         # Thai National ID: 13 digits with or without hyphens
         ("THAI_ID", r"\b\d{1}[-\s]?\d{4}[-\s]?\d{5}[-\s]?\d{2}[-\s]?\d{1}\b", "[REDACTED_THAI_ID]"),
         # Credit Card: Visa, MasterCard, Amex, Discover (13-19 digits with separators)
-        ("CREDIT_CARD", r"\b(?:\d{4}[-\s]?){3}\d{4}\b|\b3[47]\d{2}[-\s]?\d{6}[-\s]?\d{5}\b", "[REDACTED_CREDIT_CARD]"),
+        # 13-19 digits: the ISO/IEC 7812 PAN range. The old pattern hard-coded
+        # 16 digits with a trailing \b, so a 19-digit UnionPay/Visa number
+        # matched nothing at all (the \b failed mid-number).
+        ("CREDIT_CARD", r"(?<!\d)(?:\d[ -]?){12,18}\d(?!\d)", "[REDACTED_CREDIT_CARD]"),
         # Email address
         ("EMAIL", r"\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b", "[REDACTED_EMAIL]"),
         # Phone Numbers: Thai (+66, 08x, 09x, 06x, 02x) and international format
-        ("PHONE", r"\b(?:\+66|0)[2689]\d{1}[-\s]?\d{3}[-\s]?\d{4}\b|\b(?:\+?1[-.\s]?)?\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4}\b", "[REDACTED_PHONE]"),
-        # API Keys and Secrets (OpenAI, GitHub, AWS, Generic Bearer)
-        ("API_KEY", r"\b(sk-[a-zA-Z0-9_-]{20,}|ghp_[a-zA-Z0-9]{36}|AKIA[0-9A-Z]{16})\b", "[REDACTED_API_KEY]"),
+        # NOTE the leading (?<!\d) instead of \b. "\b\+66" can never match:
+        # \b requires a word/non-word transition, but a space followed by "+"
+        # is non-word to non-word — so every international-format number
+        # written as "+66812345678" slipped through entirely.
+        # Separators are also optional throughout, since Thai numbers are
+        # commonly written with no hyphens at all.
+        # The lookarounds exclude adjacent alphanumerics, not just digits, so
+        # a digit run embedded in an identifier or token is not mistaken for
+        # a phone number.
+        ("PHONE", r"(?<![\w])(?:\+66|0)[2689]\d[-.\s]?\d{3}[-.\s]?\d{4}(?![\w])|(?<![\w+])(?:\+?1[-.\s]?)?\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4}(?![\w])", "[REDACTED_PHONE]"),
     ]
 
     def __init__(self):

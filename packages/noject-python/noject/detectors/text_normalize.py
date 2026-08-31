@@ -1,5 +1,6 @@
 import base64
 import binascii
+import codecs
 import re
 import urllib.parse
 from typing import List
@@ -24,6 +25,57 @@ def strip_zero_width(text: str) -> str:
     if not text:
         return ""
     return _ZERO_WIDTH_PATTERN.sub("", text)
+
+
+def rot13(text: str) -> str:
+    """ROT13-decode text. Costs an attacker nothing to apply and defeats
+    every literal keyword pattern; ROT13 is its own inverse, so a single
+    transform covers both directions."""
+    if not text:
+        return ""
+    try:
+        return codecs.decode(text, "rot_13")
+    except Exception:
+        return text
+
+
+# "i g n o r e   a l l" — single characters separated by spaces/punctuation.
+# Requires a run of at least 6 to avoid collapsing ordinary short words.
+_SPACED_LETTERS = re.compile(r"(?:\b[A-Za-z]\b[\s.\-_*|]+){5,}\b[A-Za-z]\b")
+
+
+def collapse_spaced_letters(text: str) -> str:
+    """Collapse s-p-e-l-l-e-d o-u-t runs back into words.
+
+    Spacing out a phrase leaves it perfectly readable to a model while
+    breaking every \\b-anchored keyword pattern. Only runs of 6+ single
+    letters are collapsed, so ordinary prose ("I a m" or initialisms) is
+    left alone.
+
+    Word boundaries are preserved: in "i g n o r e   a l l", letters are
+    separated by a single space and words by a wider gap, so single
+    separators are removed while runs of 2+ collapse to one space. Removing
+    every separator would yield "ignoreall...", which matches no
+    whitespace-anchored pattern either.
+    """
+    if not text:
+        return ""
+
+    def _join(match: re.Match) -> str:
+        chunk = match.group(0)
+        if re.search(r"[.\-_*|]", chunk):
+            # Punctuation is doing the intra-word spacing
+            # ("i-g-n-o-r-e a-l-l"), so whitespace marks word boundaries.
+            chunk = re.sub(r"\s+", "\x00", chunk)
+            chunk = re.sub(r"[.\-_*|]", "", chunk)
+        else:
+            # Whitespace-only spacing ("i g n o r e   a l l"): a single
+            # space separates letters, a wider gap separates words.
+            chunk = re.sub(r"\s{2,}", "\x00", chunk)
+            chunk = re.sub(r"\s", "", chunk)
+        return chunk.replace("\x00", " ")
+
+    return _SPACED_LETTERS.sub(_join, text)
 
 
 def url_unescape_text(text: str) -> str:
@@ -60,9 +112,13 @@ def extract_base64_payloads(text: str, max_segments: int = 5) -> List[str]:
     return decoded
 
 
+_HEX_RUN = re.compile(r"(?:(?:0x|\\x)?([0-9a-fA-F]{2})[\s,:-]?){8,}")
+
+
 def extract_hex_payloads(text: str, max_segments: int = 5) -> List[str]:
     """Find hex-encoded byte runs and decode printable ASCII/UTF-8 strings."""
     decoded: List[str] = []
+    # Find consecutive hex runs (at least 16 hex chars / 8 bytes)
     raw_hex_matches = re.finditer(r"\b(?:[0-9a-fA-F]{2}){8,}\b", text)
     for match in raw_hex_matches:
         if len(decoded) >= max_segments:

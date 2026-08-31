@@ -11,9 +11,17 @@ var (
 	// OR-conjunction against a quoted comparison, covering LIKE/IN/</>
 	// tautologies (' OR 'x' LIKE 'x, ' OR 1<2, ' OR 'a' IN ('a')) as well
 	// as the original 1=1 form.
-	sqliBooleanTrue = regexp.MustCompile(`(?i)(['"]\s*OR\s+['"]?1['"]?\s*=\s*['"]?1|['"]\s*OR\s+['"]?[a-zA-Z0-9]+['"]?\s*(=|<>|!=|>|<|LIKE|IN)\s*['"(]?[a-zA-Z0-9]+|OR\s+1\s*=\s*1\s*(--|#|/\*))`)
+	// Matches OR *and* AND conjunctions. Blind-SQLi enumeration is driven
+	// almost entirely by AND (' AND '1'='1 vs ' AND '1'='2 to compare
+	// responses), so anchoring on OR alone missed the most common
+	// data-extraction technique outright.
+	sqliBooleanTrue = regexp.MustCompile(`(?i)(['"]\s*(OR|AND)\s+['"]?1['"]?\s*=\s*['"]?1|['"]\s*(OR|AND)\s+['"]?[a-zA-Z0-9]+['"]?\s*(=|<>|!=|>|<|LIKE|IN)\s*['"(]?[a-zA-Z0-9]+|\b(OR|AND)\s+1\s*=\s*1\b)`)
 	sqliStacked     = regexp.MustCompile(`(?i);\s*(DROP\s+TABLE|DELETE\s+FROM|INSERT\s+INTO|UPDATE\s+\w+\s+SET|ALTER\s+TABLE|EXEC\s*\()\b`)
-	sqliTimeDelay   = regexp.MustCompile(`(?i)\b(SLEEP\s*\(\s*\d+\s*\)|BENCHMARK\s*\(\s*\d+|WAITFOR\s+DELAY\s+['"]\d+)`)
+	// Time-based blind SQLi across engines, not just MySQL/MSSQL: PostgreSQL
+	// uses pg_sleep(), Oracle DBMS_PIPE.RECEIVE_MESSAGE / DBMS_LOCK.SLEEP,
+	// SQLite randomblob() burn loops. Listing only SLEEP/BENCHMARK/WAITFOR
+	// left every non-MySQL backend undefended.
+	sqliTimeDelay = regexp.MustCompile(`(?i)\b(SLEEP\s*\(\s*\d+\s*\)|PG_SLEEP\s*\(|BENCHMARK\s*\(\s*\d+|WAITFOR\s+DELAY\s+['"]?\d+|DBMS_PIPE\.RECEIVE_MESSAGE\s*\(|DBMS_LOCK\.SLEEP\s*\(|RANDOMBLOB\s*\(\s*\d{6,})`)
 	sqliCommentHack = regexp.MustCompile(`(?i)['"]\s*(--|#|/\*)`)
 )
 
