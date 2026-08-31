@@ -9,6 +9,10 @@
 
 **NoJect** is an open-source, high-performance API Gateway designed to defend modern applications and AI workflows against both **traditional injection attacks** (SQLi, XSS, Command Injection, Path Traversal) and **AI-specific threats** (Prompt Injection, Jailbreaks, System Prompt Extraction, PII Leakage).
 
+<p align="center">
+  <img src="docs/assets/noject_master_infographic.png" alt="NoJect Master Executive Infographic" width="1000"/>
+</p>
+
 ```
 [ Client / Application ]
          │

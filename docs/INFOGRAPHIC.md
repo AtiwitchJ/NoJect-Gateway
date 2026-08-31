@@ -1,6 +1,10 @@
 # 🛡️ NoJect Executive Infographic & Presentation Deck
 ### Universal AI & Security API Gateway (ISO 27001 / ISO 42001 / ISO 27034)
 
+<p align="center">
+  <img src="assets/noject_master_infographic.png" alt="NoJect Master Executive Infographic" width="1000"/>
+</p>
+
 ---
 
 ## 📌 Executive Summary (One-Pager Infographic)
