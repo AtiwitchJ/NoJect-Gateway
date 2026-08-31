@@ -15,6 +15,7 @@ import (
 	"noject/internal/audit"
 	"noject/internal/auth"
 	"noject/internal/guardclient"
+	"noject/internal/metrics"
 	"noject/internal/waf"
 )
 
@@ -245,11 +246,16 @@ func (h *GatewayHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		body, _ = io.ReadAll(r.Body)
 	}
 
+	var wafDuration, guardDuration, proxyDuration time.Duration
+
 	// 3. Fast-Path WAF Check
 	if route.Guardrails.FastWAF {
+		wafStart := time.Now()
 		wafRes := h.wafEngine.Inspect(r.Method, r.URL.Path, r.URL.RawQuery, r.Header, body)
+		wafDuration = time.Since(wafStart)
+
 		if wafRes.Blocked {
-			_ = h.auditLogger.LogEvent(audit.Event{
+			ev := audit.Event{
 				TraceID:        traceID,
 				ClientID:       clientID,
 				ClientIP:       clientIP,
@@ -260,6 +266,19 @@ func (h *GatewayHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 				Confidence:     1.0,
 				Reason:         wafRes.Reason,
 				MatchedRule:    wafRes.MatchedRule,
+			}
+			_ = h.auditLogger.LogEvent(ev)
+			metrics.Default().RecordRequest(http.StatusForbidden, "BLOCKED", string(wafRes.ThreatType), wafDuration, 0, 0, &metrics.SecurityEvent{
+				Timestamp:      time.Now().UTC(),
+				TraceID:        traceID,
+				ClientID:       clientID,
+				ClientIP:       clientIP,
+				Route:          route.Path,
+				Action:         "BLOCKED",
+				ThreatCategory: string(wafRes.ThreatType),
+				Severity:       string(wafRes.Severity),
+				Confidence:     1.0,
+				Reason:         wafRes.Reason,
 			})
 			h.writeError(w, http.StatusForbidden, traceID, "SECURITY_VIOLATION", string(wafRes.ThreatType), wafRes.Reason, 1.0)
 			return
@@ -288,7 +307,10 @@ func (h *GatewayHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 				},
 			}
 
+			guardStart := time.Now()
 			guardRes, err := h.guardClient.InspectRequest(r.Context(), guardReq)
+			guardDuration = time.Since(guardStart)
+
 			if err != nil {
 				_ = h.auditLogger.LogEvent(audit.Event{
 					TraceID:        traceID,
@@ -313,6 +335,18 @@ func (h *GatewayHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 					Action:         audit.ActionBlocked,
 					ThreatCategory: audit.ThreatCategory(guardRes.ThreatType),
 					Severity:       audit.Severity(guardRes.RiskLevel),
+					Confidence:     guardRes.Confidence,
+					Reason:         guardRes.Reason,
+				})
+				metrics.Default().RecordRequest(http.StatusForbidden, "BLOCKED", guardRes.ThreatType, wafDuration, guardDuration, 0, &metrics.SecurityEvent{
+					Timestamp:      time.Now().UTC(),
+					TraceID:        traceID,
+					ClientID:       clientID,
+					ClientIP:       clientIP,
+					Route:          route.Path,
+					Action:         "BLOCKED",
+					ThreatCategory: guardRes.ThreatType,
+					Severity:       guardRes.RiskLevel,
 					Confidence:     guardRes.Confidence,
 					Reason:         guardRes.Reason,
 				})
@@ -353,7 +387,10 @@ func (h *GatewayHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	proxyReq.Header.Set("X-Trace-ID", traceID)
 	proxyReq.Header.Set("X-Forwarded-For", clientIP)
 
+	proxyStart := time.Now()
 	resp, err := h.httpClient.Do(proxyReq)
+	proxyDuration = time.Since(proxyStart)
+
 	if err != nil {
 		_ = h.auditLogger.LogEvent(audit.Event{
 			TraceID:        traceID,
@@ -392,6 +429,18 @@ func (h *GatewayHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 				Confidence:     1.0,
 				Reason:         outRes.Reason,
 			})
+			metrics.Default().RecordRequest(http.StatusBadGateway, "BLOCKED", "CANARY_LEAK", wafDuration, guardDuration, proxyDuration, &metrics.SecurityEvent{
+				Timestamp:      time.Now().UTC(),
+				TraceID:        traceID,
+				ClientID:       clientID,
+				ClientIP:       clientIP,
+				Route:          route.Path,
+				Action:         "BLOCKED",
+				ThreatCategory: "CANARY_LEAK",
+				Severity:       "CRITICAL",
+				Confidence:     1.0,
+				Reason:         outRes.Reason,
+			})
 			h.writeError(w, http.StatusBadGateway, traceID, "CANARY_SECRET_LEAK", "CANARY_LEAK", "upstream response blocked due to sensitive canary token leakage", 1.0)
 			return
 		}
@@ -409,6 +458,23 @@ func (h *GatewayHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		Confidence:     guardConfidence,
 		Reason:         guardReason,
 	})
+
+	var eventRecord *metrics.SecurityEvent
+	if action == audit.ActionMasked {
+		eventRecord = &metrics.SecurityEvent{
+			Timestamp:      time.Now().UTC(),
+			TraceID:        traceID,
+			ClientID:       clientID,
+			ClientIP:       clientIP,
+			Route:          route.Path,
+			Action:         "MASKED",
+			ThreatCategory: "PII_DETECTED",
+			Severity:       "MEDIUM",
+			Confidence:     guardConfidence,
+			Reason:         guardReason,
+		}
+	}
+	metrics.Default().RecordRequest(resp.StatusCode, string(action), string(threatCategory), wafDuration, guardDuration, proxyDuration, eventRecord)
 
 	// 8. Write Response to Client
 	for k, vv := range resp.Header {

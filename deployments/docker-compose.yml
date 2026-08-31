@@ -36,6 +36,31 @@ services:
     networks:
       - noject-net
 
+  prometheus:
+    image: prom/prometheus:v2.54.1
+    container_name: noject-prometheus
+    restart: unless-stopped
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml:ro
+    networks:
+      - noject-net
+
+  grafana:
+    image: grafana/grafana:11.2.0
+    container_name: noject-grafana
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+      - GF_USERS_ALLOW_SIGN_UP=false
+    networks:
+      - noject-net
+    depends_on:
+      - prometheus
+
 networks:
   noject-net:
     driver: bridge

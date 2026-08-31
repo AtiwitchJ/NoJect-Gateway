@@ -14,7 +14,9 @@ import (
 	"noject/internal/audit"
 	"noject/internal/auth"
 	"noject/internal/config"
+	"noject/internal/dashboard"
 	"noject/internal/guardclient"
+	"noject/internal/metrics"
 	"noject/internal/router"
 	"noject/internal/waf"
 )
@@ -131,7 +133,9 @@ func main() {
 		AuditLogger: auditLogger,
 	})
 
-	// 6. Setup Multiplexer with Health Checks
+	// 6. Setup Multiplexer with Health Checks, Metrics, and Dashboard
+	dashHandler := dashboard.NewHandler(metrics.Default())
+
 	mux := http.NewServeMux()
 	mux.HandleFunc("/healthz", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
@@ -143,7 +147,14 @@ func main() {
 		w.WriteHeader(http.StatusOK)
 		_, _ = w.Write([]byte(`{"status":"ready"}`))
 	})
+	mux.Handle("/dashboard", dashHandler)
+	mux.Handle("/dashboard/", dashHandler)
+	mux.Handle("/api/stats", dashHandler)
+	mux.Handle("/metrics", dashHandler)
 	mux.Handle("/", gatewayHandler)
+
+	log.Printf("[INFO] 📊 Web Dashboard live at http://%s:%d/dashboard", cfg.Server.Host, cfg.Server.Port)
+	log.Printf("[INFO] 📈 Prometheus Metrics live at http://%s:%d/metrics", cfg.Server.Host, cfg.Server.Port)
 
 	serverAddr := fmt.Sprintf("%s:%d", cfg.Server.Host, cfg.Server.Port)
 	server := &http.Server{

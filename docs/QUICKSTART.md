@@ -6,17 +6,17 @@
 
 ## 🚀 1. Run with Docker Compose (Recommended)
 
-Start both Go Gateway and Python Guard Engine with one command:
+Start Go Gateway, Python Guard Engine, Prometheus, and Grafana with one command:
 
 ```bash
 docker compose -f deployments/docker-compose.yml up -d
 ```
 
-Check status:
-```bash
-curl http://localhost:8080/healthz
-# Response: {"status":"healthy","version":"1.0.0"}
-```
+### Access Dashboards & Endpoints:
+- 📊 **Built-in Web Dashboard**: [http://localhost:8080/dashboard](http://localhost:8080/dashboard)
+- 📈 **Prometheus Metrics**: [http://localhost:8080/metrics](http://localhost:8080/metrics)
+- 🖥️ **Grafana**: [http://localhost:3000](http://localhost:3000) (User: `admin` / Password: `admin`)
+- 🩺 **Health Check**: [http://localhost:8080/healthz](http://localhost:8080/healthz)
 
 ---
 

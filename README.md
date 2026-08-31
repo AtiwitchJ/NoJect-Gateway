@@ -55,6 +55,9 @@
 4. **ISO Compliance & Tamper-Evident Audit Logging**:
    - Built to meet **ISO/IEC 27001** (ISMS / Logging A.8.15 / Access Control A.8.2) and **ISO/IEC 42001** (AI Management Systems).
    - **Cryptographic SHA-256 Hash Chaining**: Verifiable audit trail where any log tampering is immediately detectable.
+5. **Real-time Observability & Monitoring**:
+   - **Embedded Web Dashboard**: Real-time SOC dashboard accessible directly at `/dashboard` with zero setup.
+   - **Prometheus & Grafana**: Native `/metrics` endpoint with ready-to-use Docker Compose stack.
 
 ---
 
