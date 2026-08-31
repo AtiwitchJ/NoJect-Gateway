@@ -81,6 +81,28 @@ Verify audit log integrity:
 
 ---
 
+## ⚡ Empirical Performance & Benchmark Results
+
+Tested on Apple Silicon (Apple M5 / Darwin arm64) under high concurrency:
+
+| Layer | Threat / Vector | Average Latency | Throughput | Performance Status |
+| :--- | :--- | :---: | :---: | :---: |
+| **Go Fast WAF** | **Path Traversal** (`../`) | **52.64 ns** (0.05 µs) | **19,000,000+ ops/s** | 🟢 Sub-microsecond |
+| **Go Fast WAF** | **SQL Injection** (SQLi) | **158.20 ns** (0.15 µs) | **6,320,000+ ops/s** | 🟢 Sub-microsecond |
+| **Go Fast WAF** | **Cross-Site Scripting** (XSS) | **300.30 ns** (0.30 µs) | **3,330,000+ ops/s** | 🟢 Sub-microsecond |
+| **Go Fast WAF** | **Command Injection** (CMD) | **663.30 ns** (0.66 µs) | **1,510,000+ ops/s** | 🟢 Sub-microsecond |
+| **Go Fast WAF** | **Full WAF Combined** (Attack Path) | **879.20 ns** (0.88 µs) | **1,140,000+ ops/s** | 🟢 Instant rejection |
+| **Python AI Guard** | **Prompt Injection Attack** | **0.39 µs** | **2,570,000+ ops/s** | 🟢 Near-zero overhead |
+| **Python AI Guard** | **Prompt Injection Clean Scan** | **5.66 µs** | **176,000+ ops/s** | 🟢 High-speed pass |
+| **Python AI Guard** | **Jailbreak Detection** (DAN) | **1.50 µs** | **660,000+ ops/s** | 🟢 Sub-millisecond |
+| **Python AI Guard** | **PII Masking & Redaction** | **6.12 µs** | **163,000+ ops/s** | 🟢 Multi-entity redaction |
+| **Python AI Guard** | **Canary Output Token Shield** | **0.10 µs** | **10,240,000+ ops/s** | 🟢 Instant response scan |
+| **Audit Layer** | **ISO 27001 SHA-256 Hash Chain** | **2.49 µs** | **401,000+ logs/s** | 🟢 Tamper-evident logging |
+
+*Detailed benchmark report and methodology available in [docs/BENCHMARKS.md](docs/BENCHMARKS.md).*
+
+---
+
 ## 📚 Documentation
 - 📊 [Detailed Benchmark Results (All Injection Vectors)](docs/BENCHMARKS.md)
 - 📖 [Quickstart Guide](docs/QUICKSTART.md)
@@ -92,13 +114,16 @@ Verify audit log integrity:
 
 ## 🧪 Testing & Verification
 
-Run the comprehensive test suite:
+Run the comprehensive test and benchmark suites:
 ```bash
-# Go unit and E2E security tests
+# Run Go unit and E2E security tests
 make test-go
 
-# Python AI Guard unit tests
+# Run Python AI Guard unit tests
 make test-py
+
+# Run Full Injection Benchmarks
+make bench
 ```
 
 ---
