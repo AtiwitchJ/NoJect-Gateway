@@ -6,18 +6,19 @@ This document presents the empirical benchmark results of **NoJect Gateway** acr
 
 ## ⚡ Executive Performance Summary
 
-| Layer | Component | Average Latency | Throughput | Target SLA | Status |
+| Layer | Component | Average Latency (ms) | Throughput | Target SLA | Status |
 | :--- | :--- | :---: | :---: | :---: | :---: |
-| **L7 Fast WAF (Go)** | Path Traversal (`../`) | **52.64 ns** (0.05 µs) | **19,000,000+ ops/s** | < 2.0 ms | 🟢 **Sub-Microsecond** |
-| **L7 Fast WAF (Go)** | SQL Injection (SQLi) | **158.20 ns** (0.15 µs) | **6,320,000+ ops/s** | < 2.0 ms | 🟢 **Sub-Microsecond** |
-| **L7 Fast WAF (Go)** | Cross-Site Scripting (XSS) | **300.30 ns** (0.30 µs) | **3,330,000+ ops/s** | < 2.0 ms | 🟢 **Sub-Microsecond** |
-| **L7 Fast WAF (Go)** | Command Injection (CMD) | **663.30 ns** (0.66 µs) | **1,510,000+ ops/s** | < 2.0 ms | 🟢 **Sub-Microsecond** |
-| **L7 Fast WAF (Go)** | Full Combined Attack Inspection | **879.20 ns** (0.88 µs) | **1,140,000+ ops/s** | < 2.0 ms | 🟢 **Sub-Microsecond** |
-| **AI Safety (Python)** | Prompt Injection Detection | **0.39 µs** (Attack) / **5.66 µs** (Clean) | **2,570,000+ ops/s** | < 50 ms | 🟢 **Near Zero Overhead** |
-| **AI Safety (Python)** | Jailbreak Detection | **1.50 µs** (Attack) / **1.78 µs** (Clean) | **660,000+ ops/s** | < 50 ms | 🟢 **Near Zero Overhead** |
-| **AI Safety (Python)** | PII Masking & Redaction | **6.12 µs** (Multi-entity) | **163,000+ ops/s** | < 50 ms | 🟢 **Near Zero Overhead** |
-| **AI Safety (Python)** | Canary Output Token Shield | **0.10 µs** | **10,240,000+ ops/s** | < 10 ms | 🟢 **Sub-Microsecond** |
-| **Audit Layer (Go)** | ISO 27001 SHA-256 Hash Chain | **2.49 µs** | **401,000+ ops/s** | < 1.0 ms | 🟢 **Sub-Millisecond** |
+| **L7 Fast WAF (Go)** | Path Traversal (`../`) | **0.00005 ms** (52.64 ns) | **19,000,000+ ops/s** | < 2.0 ms | 🟢 **Sub-Millisecond** |
+| **L7 Fast WAF (Go)** | SQL Injection (SQLi) | **0.00016 ms** (158.20 ns) | **6,320,000+ ops/s** | < 2.0 ms | 🟢 **Sub-Millisecond** |
+| **L7 Fast WAF (Go)** | Cross-Site Scripting (XSS) | **0.00030 ms** (300.30 ns) | **3,330,000+ ops/s** | < 2.0 ms | 🟢 **Sub-Millisecond** |
+| **L7 Fast WAF (Go)** | Command Injection (CMD) | **0.00066 ms** (663.30 ns) | **1,510,000+ ops/s** | < 2.0 ms | 🟢 **Sub-Millisecond** |
+| **L7 Fast WAF (Go)** | Full Combined Attack Inspection | **0.00088 ms** (879.20 ns) | **1,140,000+ ops/s** | < 2.0 ms | 🟢 **Sub-Millisecond** |
+| **AI Safety (Python)** | Prompt Injection (Attack) | **0.00039 ms** (0.39 µs) | **2,570,000+ ops/s** | < 50 ms | 🟢 **Sub-Millisecond** |
+| **AI Safety (Python)** | Prompt Injection (Clean Scan) | **0.00566 ms** (5.66 µs) | **176,000+ ops/s** | < 50 ms | 🟢 **Sub-Millisecond** |
+| **AI Safety (Python)** | Jailbreak Detection (DAN) | **0.00150 ms** (1.50 µs) | **660,000+ ops/s** | < 50 ms | 🟢 **Sub-Millisecond** |
+| **AI Safety (Python)** | PII Masking & Redaction | **0.00612 ms** (6.12 µs) | **163,000+ ops/s** | < 50 ms | 🟢 **Sub-Millisecond** |
+| **AI Safety (Python)** | Canary Output Token Shield | **0.00010 ms** (0.10 µs) | **10,240,000+ ops/s** | < 10 ms | 🟢 **Sub-Millisecond** |
+| **Audit Layer (Go)** | ISO 27001 SHA-256 Hash Chain | **0.00249 ms** (2.49 µs) | **401,000+ logs/s** | < 1.0 ms | 🟢 **Sub-Millisecond** |
 
 ---
 
