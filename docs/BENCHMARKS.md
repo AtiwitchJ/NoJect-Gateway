@@ -6,6 +6,10 @@ This document presents the empirical benchmark results of **NoJect Gateway** acr
 
 ## 🛡️ 1. Security Protection & Accuracy Score Matrix (Security Efficacy)
 
+<p align="center">
+  <img src="assets/security_matrix_chart.png" alt="NoJect Security Protection Score Matrix Chart" width="950"/>
+</p>
+
 ### A. Vector-by-Vector Security Matrix
 Evaluated across standard attack payloads (OWASP Top 10 + OWASP Top 10 for LLM) and clean control datasets:
 
@@ -45,6 +49,10 @@ Shows the defense rating of each model standalone vs when protected by NoJect Ga
 ---
 
 ## ⚡ 2. Empirical Performance & Latency Benchmarks (Per Model Breakdown in ms)
+
+<p align="center">
+  <img src="assets/latency_benchmark_chart.png" alt="NoJect Latency Benchmark Breakdown Chart" width="950"/>
+</p>
 
 Tested on Apple Silicon (Apple M5 / Darwin arm64):
 

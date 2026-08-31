@@ -83,6 +83,10 @@ Verify audit log integrity:
 
 ## 🛡️ Security Protection & Accuracy Score Matrix (Per-Model Breakdown)
 
+<p align="center">
+  <img src="docs/assets/security_matrix_chart.png" alt="NoJect Security Protection Score Matrix Chart" width="950"/>
+</p>
+
 Empirical evaluation showing Standalone Native Defense vs Shielded by NoJect Gateway:
 
 | Target LLM Model | Provider | Native Defense | NoJect Shielded Defense | False Positive Rate | Shielded Grade |
@@ -102,6 +106,10 @@ Empirical evaluation showing Standalone Native Defense vs Shielded by NoJect Gat
 ---
 
 ## ⚡ Empirical Performance & Latency Benchmarks (Per-Model in ms)
+
+<p align="center">
+  <img src="docs/assets/latency_benchmark_chart.png" alt="NoJect Latency Benchmark Breakdown Chart" width="950"/>
+</p>
 
 Tested on Apple Silicon (Apple M5 / Darwin arm64):
 
