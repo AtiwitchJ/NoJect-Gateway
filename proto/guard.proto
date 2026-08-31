@@ -1,0 +1,46 @@
+syntax = "proto3";
+
+package guard;
+option go_package = "noject/proto/guard";
+
+service GuardService {
+  rpc InspectRequest (InspectReq) returns (InspectResp);
+  rpc InspectResponse (InspectOutputReq) returns (InspectOutputResp);
+}
+
+message InspectReq {
+  string trace_id = 1;
+  string route = 2;
+  string prompt = 3;
+  map<string, string> metadata = 4;
+  GuardPolicies policies = 5;
+}
+
+message GuardPolicies {
+  bool enable_prompt_injection = 1;
+  bool enable_jailbreak = 2;
+  bool enable_pii_masking = 3;
+  double sensitivity_threshold = 4;
+}
+
+message InspectResp {
+  bool allowed = 1;
+  string sanitized_prompt = 2;
+  string threat_type = 3;
+  string risk_level = 4;
+  double confidence = 5;
+  string reason = 6;
+}
+
+message InspectOutputReq {
+  string trace_id = 1;
+  string response_text = 2;
+  repeated string canary_tokens = 3;
+}
+
+message InspectOutputResp {
+  bool allowed = 1;
+  string sanitized_response = 2;
+  string threat_type = 3;
+  string reason = 4;
+}
