@@ -132,6 +132,7 @@ Tested on Apple Silicon (Apple M5 / Darwin arm64):
 ---
 
 ## 📚 Documentation
+- 🌐 [International Security Standards & Evaluation Framework](docs/SECURITY_STANDARDS.md)
 - 🎨 [Executive Infographic & Presentation Deck (Markdown)](docs/INFOGRAPHIC.md)
 - 🖥️ [Interactive Presentation Slides (HTML)](docs/presentation.html)
 - 📊 [Detailed Benchmark Results (All Injection Vectors)](docs/BENCHMARKS.md)
