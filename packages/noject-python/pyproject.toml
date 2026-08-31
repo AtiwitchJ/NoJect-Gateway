@@ -1,0 +1,58 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "noject"
+version = "1.0.0"
+description = "Universal AI & Security Guardrail Library for Python (OWASP LLM, MITRE ATLAS, ISO 42001/27001 Aligned)"
+readme = "README.md"
+requires-python = ">=3.9"
+license = { text = "MIT" }
+authors = [
+    { name = "Atiwitch Janthasopee" }
+]
+keywords = [
+    "security",
+    "ai-safety",
+    "prompt-injection",
+    "jailbreak",
+    "waf",
+    "pii-masking",
+    "llm-guard",
+    "owasp",
+    "iso42001"
+]
+classifiers = [
+    "Development Status :: 5 - Production/Stable",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
+    "Topic :: Security",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence"
+]
+dependencies = []
+
+[project.optional-dependencies]
+fastapi = ["fastapi>=0.100.0", "starlette>=0.27.0"]
+dev = ["pytest>=7.0.0"]
+
+[project.urls]
+Homepage = "https://github.com/AtiwitchJ/NoJect-Gateway"
+Repository = "https://github.com/AtiwitchJ/NoJect-Gateway.git"
+Issues = "https://github.com/AtiwitchJ/NoJect-Gateway/issues"
+
+[dependency-groups]
+dev = [
+    "pytest>=7.0.0",
+]
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["noject*"]

@@ -1,0 +1,36 @@
+{
+  "name": "noject",
+  "version": "1.0.0",
+  "description": "Universal AI & Security Guardrail Library for TypeScript & JavaScript (OWASP LLM, MITRE ATLAS, ISO 42001/27001 Aligned)",
+  "main": "dist/index.js",
+  "module": "dist/index.mjs",
+  "types": "dist/index.d.ts",
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc",
+    "test": "npx ts-node tests/guard.test.ts"
+  },
+  "keywords": [
+    "security",
+    "ai-safety",
+    "prompt-injection",
+    "jailbreak",
+    "waf",
+    "pii-masking",
+    "llm-guard",
+    "owasp",
+    "express-middleware"
+  ],
+  "author": "Atiwitch Janthasopee",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/AtiwitchJ/NoJect-Gateway.git"
+  },
+  "devDependencies": {
+    "typescript": "^5.4.0",
+    "@types/node": "^20.0.0"
+  }
+}

@@ -1,0 +1,1 @@
+{"version":3,"file":"pathTraversal.d.ts","sourceRoot":"","sources":["../../src/waf/pathTraversal.ts"],"names":[],"mappings":"AAAA,OAAO,EAAE,UAAU,EAAE,MAAM,UAAU,CAAC;AAEtC,eAAO,MAAM,aAAa,EAAE,KAAK,CAAC;IAAE,KAAK,EAAE,MAAM,CAAC;IAAC,MAAM,EAAE,MAAM,CAAC;IAAC,GAAG,EAAE,MAAM,CAAA;CAAE,CAG/E,CAAC;AAEF,wBAAgB,oBAAoB,CAAC,KAAK,EAAE,MAAM,GAAG,UAAU,GAAG,IAAI,CAcrE"}
