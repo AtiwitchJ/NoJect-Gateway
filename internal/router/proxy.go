@@ -21,13 +21,18 @@ import (
 
 // GatewayHandler orchestrates authentication, fast-path WAF, AI guardrails, reverse proxying, and ISO audit logging.
 type GatewayHandler struct {
-	table       *Table
-	auth        auth.Authenticator
-	wafEngine   *waf.Engine
-	guardClient *guardclient.Client
-	auditLogger audit.Logger
-	httpClient  *http.Client
+	table        *Table
+	auth         auth.Authenticator
+	wafEngine    *waf.Engine
+	guardClient  *guardclient.Client
+	auditLogger  audit.Logger
+	httpClient   *http.Client
+	maxBodyBytes int64
 }
+
+// DefaultMaxBodyBytes bounds request bodies the gateway will buffer when
+// no explicit limit is configured.
+const DefaultMaxBodyBytes int64 = 10 << 20 // 10 MiB
 
 // HandlerConfig holds configuration for the GatewayHandler.
 type HandlerConfig struct {
@@ -36,12 +41,18 @@ type HandlerConfig struct {
 	WAFEngine   *waf.Engine
 	GuardClient *guardclient.Client
 	AuditLogger audit.Logger
+	// MaxBodyBytes caps how much request body is read into memory.
+	// Defaults to DefaultMaxBodyBytes when zero or negative.
+	MaxBodyBytes int64
 }
 
 // NewGatewayHandler creates a fully initialized GatewayHandler.
 func NewGatewayHandler(cfg HandlerConfig) *GatewayHandler {
 	if cfg.WAFEngine == nil {
 		cfg.WAFEngine = waf.NewEngine(waf.DefaultConfig())
+	}
+	if cfg.MaxBodyBytes <= 0 {
+		cfg.MaxBodyBytes = DefaultMaxBodyBytes
 	}
 	return &GatewayHandler{
 		table:       cfg.Table,
@@ -52,6 +63,7 @@ func NewGatewayHandler(cfg HandlerConfig) *GatewayHandler {
 		httpClient: &http.Client{
 			Timeout: 60 * time.Second,
 		},
+		maxBodyBytes: cfg.MaxBodyBytes,
 	}
 }
 
@@ -95,18 +107,22 @@ func extractPrompt(body []byte) string {
 	var jsonMap map[string]interface{}
 	if err := json.Unmarshal(body, &jsonMap); err == nil {
 		// 1. OpenAI format: {"messages":[{"role":"user","content":"..."}]}
+		// Every message is inspected, not just the last: an injection or
+		// PII planted in the system prompt or an earlier turn reaches the
+		// upstream model just as effectively. Contents are joined with
+		// promptSeparator so replacePromptInBody can map the sanitized
+		// text back to the individual messages it came from.
 		if msgs, ok := jsonMap["messages"].([]interface{}); ok {
-			var builder strings.Builder
+			var contents []string
 			for _, m := range msgs {
 				if msgMap, ok := m.(map[string]interface{}); ok {
 					if content, ok := msgMap["content"].(string); ok {
-						builder.WriteString(content)
-						builder.WriteString(" ")
+						contents = append(contents, content)
 					}
 				}
 			}
-			if builder.Len() > 0 {
-				return strings.TrimSpace(builder.String())
+			if len(contents) > 0 {
+				return strings.Join(contents, promptSeparator)
 			}
 		}
 
@@ -121,16 +137,62 @@ func extractPrompt(body []byte) string {
 	return string(body)
 }
 
-// replacePromptInBody updates the JSON body with the sanitized prompt text.
+// promptSeparator joins message contents when flattening a conversation for
+// inspection, and splits the guard's sanitized text back into per-message
+// parts. It must be a sequence that will not occur inside message content
+// and that the guard's PII masking will not rewrite.
+const promptSeparator = "\n␞\n" // U+241E SYMBOL FOR RECORD SEPARATOR
+
+// replacePromptInBody writes the guard's sanitized text back into the JSON
+// body, restoring it to EVERY message it was extracted from.
+//
+// Previously this assigned the sanitized text to only the last message.
+// Because extractPrompt flattens the whole conversation into one string,
+// that had two consequences: every earlier message (including the system
+// prompt and prior turns) was forwarded upstream with its original,
+// unmasked content — so PII the guard had detected still left the gateway —
+// and the last message was overwritten with the entire flattened
+// conversation, destroying the turn structure the upstream model relies on.
 func replacePromptInBody(originalBody []byte, sanitizedPrompt string) []byte {
 	var jsonMap map[string]interface{}
 	if err := json.Unmarshal(originalBody, &jsonMap); err == nil {
-		// Replace in OpenAI messages if last message is user
 		if msgs, ok := jsonMap["messages"].([]interface{}); ok && len(msgs) > 0 {
-			if lastMsg, ok := msgs[len(msgs)-1].(map[string]interface{}); ok {
-				lastMsg["content"] = sanitizedPrompt
-				newBody, err := json.Marshal(jsonMap)
-				if err == nil {
+			// Collect the messages that carry string content, in the same
+			// order extractPrompt walked them.
+			var contentMsgs []map[string]interface{}
+			for _, m := range msgs {
+				if msgMap, ok := m.(map[string]interface{}); ok {
+					if _, ok := msgMap["content"].(string); ok {
+						contentMsgs = append(contentMsgs, msgMap)
+					}
+				}
+			}
+
+			if len(contentMsgs) > 0 {
+				parts := strings.Split(sanitizedPrompt, promptSeparator)
+				if len(parts) == len(contentMsgs) {
+					// Normal path: sanitization preserved the separators, so
+					// each part maps back to its originating message.
+					for i, msgMap := range contentMsgs {
+						msgMap["content"] = parts[i]
+					}
+				} else {
+					// The guard collapsed or altered the separators (e.g. a
+					// rewrite spanning a boundary). Falling back to writing
+					// the whole blob into one message would silently forward
+					// the other messages unsanitized, so instead put the full
+					// sanitized text in the last message and blank the rest:
+					// content is lost, but nothing unsanitized escapes.
+					last := len(contentMsgs) - 1
+					for i, msgMap := range contentMsgs {
+						if i == last {
+							msgMap["content"] = sanitizedPrompt
+						} else {
+							msgMap["content"] = ""
+						}
+					}
+				}
+				if newBody, err := json.Marshal(jsonMap); err == nil {
 					return newBody
 				}
 			}
@@ -240,10 +302,21 @@ func (h *GatewayHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		clientID = authCtx.Subject
 	}
 
-	// Read Request Body
+	// Read Request Body, bounded. The whole body is buffered in memory for
+	// WAF and guard inspection, so an unbounded read lets a few large
+	// concurrent uploads exhaust the gateway's memory. Over-limit requests
+	// are rejected with 413 rather than truncated — a truncated body would
+	// be inspected clean and then forwarded incomplete.
 	var body []byte
 	if r.Body != nil {
-		body, _ = io.ReadAll(r.Body)
+		limited := io.LimitReader(r.Body, h.maxBodyBytes+1)
+		body, _ = io.ReadAll(limited)
+		if int64(len(body)) > h.maxBodyBytes {
+			h.writeError(w, http.StatusRequestEntityTooLarge, traceID,
+				"payload_too_large", "NONE",
+				"request body exceeds maximum allowed size", 0)
+			return
+		}
 	}
 
 	var wafDuration, guardDuration, proxyDuration time.Duration

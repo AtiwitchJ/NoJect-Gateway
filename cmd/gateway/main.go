@@ -34,6 +34,22 @@ const (
 `
 )
 
+// requireAuth wraps an operator-facing handler so it is reachable only with
+// valid credentials. These endpoints serve security telemetry (client IPs,
+// blocked-request reasons with matched attack samples), which is both PII
+// and a live map of what is evading the filters — not public data.
+func requireAuth(authenticator auth.Authenticator, next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if _, err := authenticator.Authenticate(r); err != nil {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusUnauthorized)
+			_, _ = w.Write([]byte(`{"error":"unauthorized","reason":"authentication required for operator endpoints"}`))
+			return
+		}
+		next.ServeHTTP(w, r)
+	})
+}
+
 func main() {
 	configPath := flag.String("config", "configs/gateway.yaml", "Path to YAML configuration file")
 	showVersion := flag.Bool("version", false, "Print version information and exit")
@@ -126,11 +142,12 @@ func main() {
 	// 5. Initialize Route Table and Gateway Handler
 	table := router.NewTable(cfg.Routes)
 	gatewayHandler := router.NewGatewayHandler(router.HandlerConfig{
-		Table:       table,
-		Auth:        multiAuth,
-		WAFEngine:   wafEngine,
-		GuardClient: guardClient,
-		AuditLogger: auditLogger,
+		Table:        table,
+		Auth:         multiAuth,
+		WAFEngine:    wafEngine,
+		GuardClient:  guardClient,
+		AuditLogger:  auditLogger,
+		MaxBodyBytes: cfg.Server.MaxBodyBytes,
 	})
 
 	// 6. Setup Multiplexer with Health Checks, Metrics, and Dashboard
@@ -147,10 +164,21 @@ func main() {
 		w.WriteHeader(http.StatusOK)
 		_, _ = w.Write([]byte(`{"status":"ready"}`))
 	})
-	mux.Handle("/dashboard", dashHandler)
-	mux.Handle("/dashboard/", dashHandler)
-	mux.Handle("/api/stats", dashHandler)
-	mux.Handle("/metrics", dashHandler)
+	// The dashboard/stats/metrics surfaces expose client IPs and details of
+	// blocked requests (including matched attack samples), so they are
+	// authenticated by default. Opt out only behind network-level controls.
+	adminHandler := http.Handler(dashHandler)
+	if cfg.Dashboard.IsAuthRequired() {
+		adminHandler = requireAuth(multiAuth, dashHandler)
+		log.Printf("[INFO] 🔒 Dashboard and metrics endpoints require authentication")
+	} else {
+		log.Printf("[WARN] ⚠️  Dashboard and metrics endpoints are UNAUTHENTICATED (dashboard.auth_required=false) — restrict access at the network layer")
+	}
+
+	mux.Handle("/dashboard", adminHandler)
+	mux.Handle("/dashboard/", adminHandler)
+	mux.Handle("/api/stats", adminHandler)
+	mux.Handle("/metrics", adminHandler)
 	mux.Handle("/", gatewayHandler)
 
 	log.Printf("[INFO] 📊 Web Dashboard live at http://%s:%d/dashboard", cfg.Server.Host, cfg.Server.Port)

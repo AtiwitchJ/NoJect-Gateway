@@ -4,7 +4,6 @@ import (
 	"crypto/hmac"
 	"crypto/sha256"
 	"encoding/hex"
-	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strconv"
@@ -180,9 +179,10 @@ func TestHMACAuthenticator(t *testing.T) {
 		WithHMACAuth(hmacAuth),
 	)
 
-	generateHMAC := func(body []byte, ts int64) string {
+	// Signature now binds method + path + query, not just timestamp + body.
+	generateHMAC := func(method, path, rawQuery string, body []byte, ts int64) string {
 		mac := hmac.New(sha256.New, hmacSecret)
-		mac.Write([]byte(fmt.Sprintf("%d:", ts)))
+		mac.Write(SigningString(method, path, rawQuery, ts))
 		mac.Write(body)
 		return hex.EncodeToString(mac.Sum(nil))
 	}
@@ -190,7 +190,7 @@ func TestHMACAuthenticator(t *testing.T) {
 	t.Run("Valid HMAC Request", func(t *testing.T) {
 		body := []byte(`{"message":"hello world"}`)
 		ts := time.Now().Unix()
-		sig := generateHMAC(body, ts)
+		sig := generateHMAC(http.MethodPost, "/api/webhook", "", body, ts)
 
 		req := httptest.NewRequest(http.MethodPost, "/api/webhook", strings.NewReader(string(body)))
 		req.Header.Set("X-Timestamp", strconv.FormatInt(ts, 10))
@@ -208,7 +208,7 @@ func TestHMACAuthenticator(t *testing.T) {
 	t.Run("Replay Attack (Expired Timestamp)", func(t *testing.T) {
 		body := []byte(`{"message":"hello world"}`)
 		ts := time.Now().Add(-10 * time.Minute).Unix()
-		sig := generateHMAC(body, ts)
+		sig := generateHMAC(http.MethodPost, "/api/webhook", "", body, ts)
 
 		req := httptest.NewRequest(http.MethodPost, "/api/webhook", strings.NewReader(string(body)))
 		req.Header.Set("X-Timestamp", strconv.FormatInt(ts, 10))
@@ -220,10 +220,54 @@ func TestHMACAuthenticator(t *testing.T) {
 		}
 	})
 
+	t.Run("Cross-Endpoint Replay (signature bound to path)", func(t *testing.T) {
+		// A signature issued for a harmless endpoint must not be reusable
+		// against a different, more dangerous one within the MaxAge window.
+		body := []byte(`{}`)
+		ts := time.Now().Unix()
+		sig := generateHMAC(http.MethodPost, "/api/v1/comment", "", body, ts)
+
+		req := httptest.NewRequest(http.MethodPost, "/api/v1/account/reset", strings.NewReader(string(body)))
+		req.Header.Set("X-Timestamp", strconv.FormatInt(ts, 10))
+		req.Header.Set("X-Signature-SHA256", sig)
+
+		if _, err := auth.Authenticate(req); err == nil {
+			t.Fatal("expected error: signature from a different path must not validate")
+		}
+	})
+
+	t.Run("Cross-Method Replay (signature bound to verb)", func(t *testing.T) {
+		body := []byte(`{}`)
+		ts := time.Now().Unix()
+		sig := generateHMAC(http.MethodGet, "/api/v1/item", "", body, ts)
+
+		req := httptest.NewRequest(http.MethodDelete, "/api/v1/item", strings.NewReader(string(body)))
+		req.Header.Set("X-Timestamp", strconv.FormatInt(ts, 10))
+		req.Header.Set("X-Signature-SHA256", sig)
+
+		if _, err := auth.Authenticate(req); err == nil {
+			t.Fatal("expected error: signature from a different method must not validate")
+		}
+	})
+
+	t.Run("Tampered Query String", func(t *testing.T) {
+		body := []byte(`{}`)
+		ts := time.Now().Unix()
+		sig := generateHMAC(http.MethodGet, "/api/v1/items", "limit=10", body, ts)
+
+		req := httptest.NewRequest(http.MethodGet, "/api/v1/items?limit=99999", strings.NewReader(string(body)))
+		req.Header.Set("X-Timestamp", strconv.FormatInt(ts, 10))
+		req.Header.Set("X-Signature-SHA256", sig)
+
+		if _, err := auth.Authenticate(req); err == nil {
+			t.Fatal("expected error: signature from a different query must not validate")
+		}
+	})
+
 	t.Run("Tampered Body Signature", func(t *testing.T) {
 		body := []byte(`{"message":"hello world"}`)
 		ts := time.Now().Unix()
-		sig := generateHMAC(body, ts)
+		sig := generateHMAC(http.MethodPost, "/api/webhook", "", body, ts)
 
 		tamperedBody := []byte(`{"message":"tampered content"}`)
 		req := httptest.NewRequest(http.MethodPost, "/api/webhook", strings.NewReader(string(tamperedBody)))

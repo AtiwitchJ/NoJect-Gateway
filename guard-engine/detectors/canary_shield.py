@@ -1,4 +1,8 @@
-from typing import Dict, Any, List
+import base64
+import binascii
+import codecs
+import re
+from typing import Dict, Any, List, Optional
 
 class CanaryShield:
     """
@@ -6,17 +10,83 @@ class CanaryShield:
     Aligned with ISO/IEC 42001 (Control B.6.2 & B.7.2).
     """
 
+    # Characters an LLM may interleave into a secret when asked to "spell it
+    # out" or otherwise obfuscate it. Stripped before the flattened check.
+    _SEPARATORS = re.compile(r"[\s\-_.,:;|/\\*+·•]")
+    _BASE64_RUN = re.compile(r"[A-Za-z0-9+/]{12,}={0,2}")
+    _HEX_RUN = re.compile(r"(?:[0-9a-fA-F]{2}){6,}")
+
+    def _decoded_views(self, text: str) -> List[str]:
+        """Return alternate representations of the response that a leaked
+        secret could be hiding in.
+
+        A plain ``token in response_text`` check only catches a verbatim
+        leak. A model induced to reveal a canary will often emit it encoded
+        or spaced out — base64, hex, ROT13, or s-p-e-l-l-e-d o-u-t — which
+        reads identically to a human but defeats substring matching.
+        """
+        views: List[str] = []
+
+        # Separator-stripped view: catches "C-A-N-A-R-Y", "C A N A R Y", etc.
+        views.append(self._SEPARATORS.sub("", text))
+
+        # ROT13 — trivial to apply, trivial to miss.
+        try:
+            views.append(codecs.decode(text, "rot_13"))
+        except Exception:
+            pass
+
+        # Decode embedded base64 runs.
+        for match in self._BASE64_RUN.finditer(text):
+            candidate = match.group(0)
+            try:
+                raw = base64.b64decode(candidate, validate=True)
+                views.append(raw.decode("utf-8", errors="ignore"))
+            except (binascii.Error, ValueError):
+                continue
+
+        # Decode embedded hex runs.
+        for match in self._HEX_RUN.finditer(text):
+            candidate = match.group(0)
+            if len(candidate) % 2:
+                candidate = candidate[:-1]
+            try:
+                views.append(bytes.fromhex(candidate).decode("utf-8", errors="ignore"))
+            except ValueError:
+                continue
+
+        return views
+
+    def _find_leak(self, token: str, response_text: str) -> Optional[str]:
+        """Return a short label for how the token leaked, or None."""
+        if token in response_text:
+            return "verbatim"
+
+        stripped_token = self._SEPARATORS.sub("", token)
+        for view in self._decoded_views(response_text):
+            if token and token in view:
+                return "encoded/obfuscated"
+            # The separator-stripped view must be compared against the
+            # equally stripped token, or a token containing "_" or "-"
+            # (e.g. CANARY_SECRET_ALPHA) never matches its own stripped form.
+            if stripped_token and stripped_token in self._SEPARATORS.sub("", view):
+                return "encoded/obfuscated"
+        return None
+
     def inspect(self, response_text: str, canary_tokens: List[str] = None) -> Dict[str, Any]:
         if not response_text:
             return {"detected": False, "threat_type": "NONE", "reason": ""}
 
         if canary_tokens:
             for token in canary_tokens:
-                if token and token in response_text:
+                if not token:
+                    continue
+                how = self._find_leak(token, response_text)
+                if how:
                     return {
                         "detected": True,
                         "threat_type": "CANARY_LEAK",
-                        "reason": f"Canary token leaked in model output",
+                        "reason": f"Canary token leaked in model output ({how})",
                         "leaked_token": token,
                     }
 

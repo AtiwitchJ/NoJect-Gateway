@@ -9,11 +9,39 @@ import (
 	"noject/internal/router"
 )
 
+// DefaultMaxBodyBytes bounds request bodies the gateway will buffer.
+// The gateway reads the whole body into memory to run WAF/guard checks, so
+// without a cap a few concurrent large uploads can exhaust its memory.
+const DefaultMaxBodyBytes int64 = 10 << 20 // 10 MiB
+
 // ServerConfig defines HTTP listening parameters.
 type ServerConfig struct {
 	Host string    `yaml:"host"`
 	Port int       `yaml:"port"`
 	TLS  TLSConfig `yaml:"tls"`
+	// MaxBodyBytes rejects requests with larger bodies (HTTP 413).
+	// Defaults to DefaultMaxBodyBytes when unset.
+	MaxBodyBytes int64 `yaml:"max_body_bytes"`
+}
+
+// DashboardConfig controls access to the operator surfaces
+// (/dashboard, /api/stats, /metrics).
+type DashboardConfig struct {
+	// AuthRequired gates the dashboard and metrics endpoints behind the
+	// configured authenticators. Defaults to true: these endpoints expose
+	// client IPs and blocked-request details (including matched attack
+	// samples), so leaving them open leaks both PII and a live view of
+	// which attacks are getting through.
+	//
+	// Set to false ONLY when the port is already restricted at the network
+	// layer (e.g. a private metrics interface scraped by Prometheus).
+	AuthRequired *bool `yaml:"auth_required"`
+}
+
+// IsAuthRequired reports whether dashboard endpoints need authentication,
+// defaulting to true when unset.
+func (d DashboardConfig) IsAuthRequired() bool {
+	return d.AuthRequired == nil || *d.AuthRequired
 }
 
 // TLSConfig defines HTTPS TLS settings.
@@ -74,6 +102,7 @@ type Config struct {
 	Version     string            `yaml:"version"`
 	Server      ServerConfig      `yaml:"server"`
 	Auth        AuthConfig        `yaml:"auth"`
+	Dashboard   DashboardConfig   `yaml:"dashboard"`
 	GuardEngine GuardEngineConfig `yaml:"guard_engine"`
 	Routes      []router.Route    `yaml:"routes"`
 	Audit       AuditConfig       `yaml:"audit"`
@@ -84,8 +113,9 @@ func DefaultConfig() Config {
 	return Config{
 		Version: "1.0",
 		Server: ServerConfig{
-			Host: "0.0.0.0",
-			Port: 8080,
+			Host:         "0.0.0.0",
+			Port:         8080,
+			MaxBodyBytes: DefaultMaxBodyBytes,
 		},
 		Auth: AuthConfig{
 			APIKey: APIKeyConfig{
@@ -117,6 +147,12 @@ func Load(filePath string) (*Config, error) {
 	cfg := DefaultConfig()
 	if err := yaml.Unmarshal(data, &cfg); err != nil {
 		return nil, fmt.Errorf("failed to parse yaml config: %w", err)
+	}
+
+	// A config file that omits max_body_bytes (or sets it to 0) must not
+	// silently disable the limit — fall back to the safe default.
+	if cfg.Server.MaxBodyBytes <= 0 {
+		cfg.Server.MaxBodyBytes = DefaultMaxBodyBytes
 	}
 
 	if err := cfg.Validate(); err != nil {

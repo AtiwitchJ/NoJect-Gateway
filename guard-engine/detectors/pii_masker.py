@@ -1,5 +1,34 @@
 import re
+import unicodedata
 from typing import Dict, Any, List, Tuple
+
+# Zero-width and other invisible formatting characters. Inserting one of
+# these mid-value (089-123<ZWSP>-4567) leaves the text visually identical
+# but breaks every regex below, so they are stripped before matching.
+_INVISIBLE_CHARS = re.compile(
+    "["
+    "​‌‍"  # zero-width space / non-joiner / joiner
+    "⁠"              # word joiner
+    "﻿"              # zero-width no-break space (BOM)
+    "­"              # soft hyphen
+    "᠎"              # Mongolian vowel separator
+    "]"
+)
+
+
+def normalize_for_matching(text: str) -> str:
+    """Canonicalize text before PII pattern matching.
+
+    Applies NFKC normalization (folding Unicode confusables and fullwidth
+    digits such as ０８９ back to their ASCII forms) and removes invisible
+    formatting characters. Without this, trivially obfuscated values slip
+    past the patterns while remaining perfectly readable to a human or a
+    downstream model.
+    """
+    if not text:
+        return text
+    return _INVISIBLE_CHARS.sub("", unicodedata.normalize("NFKC", text))
+
 
 class PIIMasker:
     """
@@ -31,7 +60,10 @@ class PIIMasker:
         if not text:
             return {"sanitized_text": "", "has_pii": False, "detected_entities": []}
 
-        sanitized = text
+        # Match against the normalized form. The normalized text is also what
+        # gets forwarded: returning the original would re-introduce the very
+        # bytes that evaded matching, leaving the PII unmasked downstream.
+        sanitized = normalize_for_matching(text)
         detected = []
 
         for label, pattern, placeholder in self.compiled:
