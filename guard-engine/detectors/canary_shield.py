@@ -26,18 +26,25 @@ class CanaryShield:
         reads identically to a human but defeats substring matching.
         """
         views: List[str] = []
+        clean_text = text
+
+        # Zero-width stripped view
+        from .text_normalize import strip_zero_width, url_unescape_text
+        zw_stripped = strip_zero_width(clean_text)
+        views.append(zw_stripped)
+        views.append(url_unescape_text(zw_stripped))
 
         # Separator-stripped view: catches "C-A-N-A-R-Y", "C A N A R Y", etc.
-        views.append(self._SEPARATORS.sub("", text))
+        views.append(self._SEPARATORS.sub("", zw_stripped))
 
         # ROT13 — trivial to apply, trivial to miss.
         try:
-            views.append(codecs.decode(text, "rot_13"))
+            views.append(codecs.decode(clean_text, "rot_13"))
         except Exception:
             pass
 
         # Decode embedded base64 runs.
-        for match in self._BASE64_RUN.finditer(text):
+        for match in self._BASE64_RUN.finditer(clean_text):
             candidate = match.group(0)
             try:
                 raw = base64.b64decode(candidate, validate=True)
@@ -46,7 +53,7 @@ class CanaryShield:
                 continue
 
         # Decode embedded hex runs.
-        for match in self._HEX_RUN.finditer(text):
+        for match in self._HEX_RUN.finditer(clean_text):
             candidate = match.group(0)
             if len(candidate) % 2:
                 candidate = candidate[:-1]

@@ -33,9 +33,11 @@ class WAFEngine:
     ]
 
     CMD_PATTERNS = [
-        (re.compile(r"(?i)(;\s*|\|\s*|&&\s*|\$\(|\`)\s*(cat\s+/etc/|/bin/sh|/bin/bash|cmd\.exe|powershell|curl\s+http|wget\s+http|rm\s+-rf)"), "CMD: Dangerous Shell Binary", "CWE-78"),
-        (re.compile(r"\$\(\s*\w+\s*\)"), "CMD: Subshell Execution", "CWE-78"),
-        (re.compile(r"(?i)\|\s*(sh|bash|zsh|dash)\b"), "CMD: Pipe to Shell", "CWE-78"),
+        (re.compile(r"(?i)(;\s*|\|\s*|&&\s*|\$\(|\`)\s*(cat\s+/etc/|/bin/(sh|bash|zsh|dash)|cmd\.exe|powershell|curl\s+https?://|wget\s+https?://|rm\s+-rf|id\b|whoami\b|uname\b|nc\b|ncat\b|netcat\b|socat\b|python[23]?\b|perl\b|ruby\b|php\b|node\b|awk\b|gawk\b|sed\b|env\b|printenv\b|find\b|xargs\b|dd\b|tar\b|openssl\b|nohup\b|chmod\b|chown\b|kill\b|pkill\b|base64\s+(-d|--decode)\b)"), "CMD: Dangerous Shell Binary", "CWE-78"),
+        (re.compile(r"(\$\([^)]+\)|`[^`]+`)"), "CMD: Subshell Execution", "CWE-78"),
+        (re.compile(r"(?i)\|\s*(sh|bash|zsh|dash|python[23]?|perl|ruby)\b"), "CMD: Pipe to Shell", "CWE-78"),
+        (re.compile(r"(?i)base64\s+(-d|--decode)\s*\|\s*(sh|bash|zsh|python[23]?|perl|ruby)\b"), "CMD: Encoded Pipe to Shell", "CWE-78"),
+        (re.compile(r"\$\{?IFS\}?"), "CMD: $IFS Obfuscation", "CWE-78"),
     ]
 
     PATH_PATTERNS = [

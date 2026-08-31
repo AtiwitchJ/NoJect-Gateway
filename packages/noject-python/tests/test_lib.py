@@ -69,3 +69,29 @@ def test_agentic_sentinel():
     res_safe = sentinel.judge_prompt("How can I implement secure session tokens in Go?")
     assert res_safe.is_threat is False
     assert res_safe.suggested_action == "PASS"
+
+def test_canary_shield_sdk():
+    from noject.detectors.canary_shield import CanaryShield
+    shield = CanaryShield()
+    canary = ["SECRET_CANARY_TOKEN_999"]
+
+    # Verbatim
+    assert shield.inspect("Leaked: SECRET_CANARY_TOKEN_999", canary)["leaked"] is True
+    # Base64
+    import base64
+    b64_leak = base64.b64encode(b"SECRET_CANARY_TOKEN_999").decode("utf-8")
+    assert shield.inspect(f"Encoded: {b64_leak}", canary)["leaked"] is True
+    # Spaced
+    assert shield.inspect("S E C R E T _ C A N A R Y _ T O K E N _ 9 9 9", canary)["leaked"] is True
+
+def test_zero_width_pii_sdk():
+    guard = NoJectGuard()
+    masked = guard.mask_pii("Hidden phone: 081\u200b234\u200b5678")
+    assert "[PHONE_NUMBER]" in masked
+
+def test_ifs_cmd_injection_sdk():
+    waf = WAFEngine()
+    res = waf.inspect(";cat$IFS/etc/passwd")
+    assert res.blocked is True
+    assert res.threat_type == "COMMAND_INJECTION"
+

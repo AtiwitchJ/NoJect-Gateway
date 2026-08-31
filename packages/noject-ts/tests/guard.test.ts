@@ -54,10 +54,32 @@ describe('WAFEngine TypeScript Suite', () => {
     assert.strictEqual(res.standardCode, 'CWE-78');
   });
 
+  it('should detect $IFS Command Injection obfuscation', () => {
+    const res = waf.inspect(';cat$IFS/etc/passwd');
+    assert.strictEqual(res.blocked, true);
+    assert.strictEqual(res.standardCode, 'CWE-78');
+  });
+
   it('should detect Path Traversal (CWE-22)', () => {
     const res = waf.inspect('../../../../etc/shadow');
     assert.strictEqual(res.blocked, true);
     assert.strictEqual(res.standardCode, 'CWE-22');
+  });
+});
+
+describe('CanaryShield TypeScript Suite', () => {
+  const { CanaryShield } = require('../src/index');
+  const shield = new CanaryShield();
+  const canary = ['SECRET_CANARY_TOKEN_999'];
+
+  it('should detect verbatim and obfuscated canary leaks', () => {
+    // Verbatim
+    assert.strictEqual(shield.inspect('Leaked: SECRET_CANARY_TOKEN_999', canary).leaked, true);
+    // Base64
+    const b64 = Buffer.from('SECRET_CANARY_TOKEN_999').toString('base64');
+    assert.strictEqual(shield.inspect(`Encoded: ${b64}`, canary).leaked, true);
+    // Spaced out
+    assert.strictEqual(shield.inspect('S E C R E T _ C A N A R Y _ T O K E N _ 9 9 9', canary).leaked, true);
   });
 });
 
@@ -78,3 +100,4 @@ describe('AgenticSentinel TypeScript Suite', () => {
     assert.strictEqual(verdict.suggestedAction, 'PASS');
   });
 });
+

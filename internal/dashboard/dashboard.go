@@ -19,12 +19,19 @@ func NewHandler(collector *metrics.Collector) *Handler {
 	return &Handler{collector: collector}
 }
 
+// setSecurityHeaders adds defensive HTTP response headers to prevent clickjacking, MIME sniffing, and XSS.
+func setSecurityHeaders(w http.ResponseWriter) {
+	w.Header().Set("X-Content-Type-Options", "nosniff")
+	w.Header().Set("X-Frame-Options", "DENY")
+	w.Header().Set("Content-Security-Policy", "default-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://fonts.gstatic.com;")
+}
+
 // ServeHTTP routes between /dashboard, /api/stats, and /metrics.
 func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	setSecurityHeaders(w)
 	switch r.URL.Path {
 	case "/api/stats":
 		w.Header().Set("Content-Type", "application/json")
-		w.Header().Set("Access-Control-Allow-Origin", "*")
 		_ = json.NewEncoder(w).Encode(h.collector.Snapshot())
 	case "/metrics":
 		w.Header().Set("Content-Type", "text/plain; version=0.0.4")
