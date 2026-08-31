@@ -1,3 +1,5 @@
+import { deleetify, extractBase64Payloads } from './textNormalize';
+
 export const PROMPT_INJECTION_PATTERNS: RegExp[] = [
   /\b(ignore|disregard|forget|override|bypass)\b\s+(all\s+)?(previous|prior|above|former|system)\s+(instructions|directives|rules|prompts|guidelines|context|constraints|restrictions|limitations)/i,
   /\b(system\s+override|admin\s+override|maintenance\s+mode|debug\s+mode)\s*:\s*(you\s+must|start|execute|now|follow)/i,
@@ -8,12 +10,10 @@ export const PROMPT_INJECTION_PATTERNS: RegExp[] = [
   /\btranslate\s+the\s+following\b.*?\b(ignore\s+previous|disregard|say\s+hacked)\b/i,
 ];
 
-export class PromptInjectionDetector {
-  public detect(text: string): { detected: boolean; confidence: number; reason: string; matchedSample?: string; standardCode?: string } {
-    if (!text) {
-      return { detected: false, confidence: 0.0, reason: 'Empty input' };
-    }
+type Verdict = { detected: boolean; confidence: number; reason: string; matchedSample?: string; standardCode?: string };
 
+export class PromptInjectionDetector {
+  private scan(text: string): Verdict | null {
     for (let idx = 0; idx < PROMPT_INJECTION_PATTERNS.length; idx++) {
       const match = text.match(PROMPT_INJECTION_PATTERNS[idx]);
       if (match) {
@@ -24,6 +24,30 @@ export class PromptInjectionDetector {
           matchedSample: match[0].substring(0, 80),
           standardCode: 'MITRE AML.T0054 / OWASP LLM01:2025',
         };
+      }
+    }
+    return null;
+  }
+
+  public detect(text: string): Verdict {
+    if (!text) {
+      return { detected: false, confidence: 0.0, reason: 'Empty input' };
+    }
+
+    let result = this.scan(text);
+    if (result) return result;
+
+    result = this.scan(deleetify(text));
+    if (result) {
+      result.reason += ' [via leetspeak normalization]';
+      return result;
+    }
+
+    for (const decoded of extractBase64Payloads(text)) {
+      result = this.scan(decoded) ?? this.scan(deleetify(decoded));
+      if (result) {
+        result.reason += ' [via base64-decoded payload]';
+        return result;
       }
     }
 

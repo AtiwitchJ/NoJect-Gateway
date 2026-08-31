@@ -5,10 +5,20 @@ import (
 )
 
 var (
-	cmdSubshell      = regexp.MustCompile(`(\$\([^)]+\)|` + "`" + `[^` + "`" + `]+` + "`" + `)`)
-	cmdPipeOrChain   = regexp.MustCompile(`(?i)(;|\||&&)\s*(cat\s+/etc/passwd|/bin/sh|/bin/bash|curl\s+https?://|wget\s+https?://|rm\s+-rf|powershell|cmd\.exe)`)
-	cmdSystemPaths   = regexp.MustCompile(`(?i)(/bin/(sh|bash|zsh|dash)|/usr/bin/id|/etc/shadow|/etc/passwd|c:\\windows\\system32)`)
-	pathTraversalDot = regexp.MustCompile(`(\.\./|\.\.\\|\.\.%2f|\.\.%5c)`)
+	cmdSubshell = regexp.MustCompile(`(\$\([^)]+\)|` + "`" + `[^` + "`" + `]+` + "`" + `)`)
+	// Widened from a handful of named commands to a broad set of
+	// interpreters/recon/exfil binaries. Still fundamentally a command
+	// allowlist (any binary not listed here still slips through), but
+	// scope is now query/path/headers only (see waf.go Inspect) where
+	// legitimate content essentially never contains "; <word>" — so the
+	// list can be broad without the false-positive cost body scanning had.
+	cmdPipeOrChain = regexp.MustCompile(`(?i)(;|\||&&)\s*(cat\s+/etc/passwd|/bin/(sh|bash|zsh|dash)|curl\s+https?://|wget\s+https?://|rm\s+-rf|powershell|cmd\.exe|id\b|whoami\b|uname\b|nc\b|ncat\b|netcat\b|python[23]?\b|perl\b|ruby\b|nohup\b|chmod\b|chown\b|kill\b|pkill\b|base64\s+(-d|--decode)\b)`)
+	cmdSystemPaths = regexp.MustCompile(`(?i)(/bin/(sh|bash|zsh|dash)|/usr/bin/id|/etc/shadow|/etc/passwd|c:\\windows\\system32)`)
+	// Decode-then-execute is a classic signature-WAF-evasion primitive
+	// (encode the real payload, decode it server-side, pipe to a shell) —
+	// flag the pattern itself regardless of what the encoded payload says.
+	cmdDecodeExecPipe = regexp.MustCompile(`(?i)base64\s+(-d|--decode)\s*\|\s*(sh|bash|zsh|python[23]?|perl|ruby)\b`)
+	pathTraversalDot  = regexp.MustCompile(`(\.\./|\.\.\\|\.\.%2f|\.\.%5c)`)
 )
 
 func checkCommandInjection(input string) *WAFResult {
@@ -45,6 +55,17 @@ func checkCommandInjection(input string) *WAFResult {
 			Severity:      SeverityHigh,
 			Reason:        "Command Injection detected: Sensitive system binary/file invocation",
 			MatchedRule:   "cmd_system_path_reference",
+			MatchedSample: truncateSample(match, 50),
+		}
+	}
+
+	if match := cmdDecodeExecPipe.FindString(input); match != "" {
+		return &WAFResult{
+			Blocked:       true,
+			ThreatType:    ThreatCMDInjection,
+			Severity:      SeverityCritical,
+			Reason:        "Command Injection detected: encoded payload decoded and piped to an interpreter",
+			MatchedRule:   "cmd_decode_exec_pipe",
 			MatchedSample: truncateSample(match, 50),
 		}
 	}

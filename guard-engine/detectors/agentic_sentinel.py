@@ -3,11 +3,17 @@ Agentic AI Security Sentinel (LLM-as-a-Judge Semantic Intent Analyzer)
 MITRE ATLAS™ AML.T0054 / OWASP LLM01:2025 Hybrid Reasoning Defense
 """
 
+import logging
 import os
 import json
 import asyncio
 from typing import Dict, Any, Optional, List
-from dataclasses import dataclass
+from dataclasses import dataclass, field
+
+from .prompt_injection import PromptInjectionDetector
+from .jailbreak import JailbreakDetector
+
+logger = logging.getLogger("noject.agentic_sentinel")
 
 @dataclass
 class AgenticVerdict:
@@ -19,6 +25,12 @@ class AgenticVerdict:
     attack_intent: str
     suggested_action: str  # "BLOCK", "SANITIZE", "FLAG", "PASS"
     standard_code: str
+    # True when this verdict came from the weak local keyword fallback
+    # instead of the live LLM judge — either no API key was configured, or
+    # the live call failed/timed out. A caller that only checks is_threat
+    # cannot tell a real "benign" verdict from a silently degraded one;
+    # this field makes that distinction visible instead of hiding it.
+    source: str = "llm"  # "llm" | "fallback"
 
 class AgenticSentinel:
     """
@@ -55,13 +67,21 @@ Output MUST be strictly valid JSON matching this schema:
         api_key: Optional[str] = None,
         base_url: Optional[str] = None,
         temperature: float = 0.0,
-        enable_heuristic_fallback: bool = True
+        enable_heuristic_fallback: bool = True,
+        timeout_s: Optional[float] = None,
     ):
         self.model_name = model_name or os.getenv("NOJECT_SENTINEL_MODEL") or "gpt-4o-mini"
         self.api_key = api_key or os.getenv("NOJECT_SENTINEL_API_KEY") or os.getenv("OPENAI_API_KEY")
         self.base_url = base_url or os.getenv("NOJECT_SENTINEL_BASE_URL", "https://api.openai.com/v1")
         self.temperature = temperature
         self.enable_heuristic_fallback = enable_heuristic_fallback
+        # 5.0s was measured to be too tight against real judge-model latency
+        # (2.5-5.1s observed against a live endpoint) — legitimately slow
+        # responses were timing out and silently downgrading to the weak
+        # local fallback. Configurable via NOJECT_SENTINEL_TIMEOUT_S.
+        self.timeout_s = timeout_s or float(os.getenv("NOJECT_SENTINEL_TIMEOUT_S", "20.0"))
+        self._pi_detector = PromptInjectionDetector()
+        self._jb_detector = JailbreakDetector()
 
     def judge_prompt_sync(self, prompt: str, context: Optional[str] = None) -> AgenticVerdict:
         """
@@ -101,7 +121,7 @@ Output MUST be strictly valid JSON matching this schema:
                         "Content-Type": "application/json"
                     }
                 )
-                with urllib.request.urlopen(req, timeout=5.0) as response:
+                with urllib.request.urlopen(req, timeout=self.timeout_s) as response:
                     res_json = json.loads(response.read().decode("utf-8"))
                     content = res_json["choices"][0]["message"]["content"]
                     parsed = json.loads(content)
@@ -113,52 +133,73 @@ Output MUST be strictly valid JSON matching this schema:
                         risk_score=int(parsed.get("risk_score", 0)),
                         attack_intent=parsed.get("attack_intent", "Unknown"),
                         suggested_action=parsed.get("suggested_action", "PASS"),
-                        standard_code=parsed.get("standard_code", "MITRE AML.T0054 / OWASP LLM01:2025")
+                        standard_code=parsed.get("standard_code", "MITRE AML.T0054 / OWASP LLM01:2025"),
+                        source="llm",
                     )
             except Exception as e:
                 if not self.enable_heuristic_fallback:
                     raise e
+                # Never fail silently: a caller checking only is_threat can't
+                # tell a genuine "benign" verdict from a degraded one. This
+                # is the signal that coverage just dropped to the weaker
+                # local layer — it belongs in logs, not swallowed.
+                logger.warning(
+                    "AgenticSentinel live judge call failed (%s: %s); falling back to local heuristic for this request.",
+                    type(e).__name__, e,
+                )
 
         # 2. Local Semantic & Cognitive Fallback Reasoner (Agentic Heuristics)
         return self._local_agentic_reasoning(prompt, context)
 
     def _local_agentic_reasoning(self, prompt: str, context: Optional[str] = None) -> AgenticVerdict:
         """
-        Deep in-memory cognitive evaluation for semantic intent when offline or in ultra-low-latency mode.
+        Local fallback for when no API key is configured or the live judge
+        call failed/timed out. Delegates to the same hardened regex
+        detectors used by the request-inspection path (PromptInjectionDetector
+        / JailbreakDetector — see prompt_injection.py / jailbreak.py), rather
+        than a separate hand-picked phrase list: a red-team pass found a
+        standalone 6-phrase substring list here was *weaker* than those
+        detectors (broken by a single inserted word or double space) and
+        kept two divergent pattern sets to maintain for no benefit.
         """
-        p_lower = prompt.lower()
-        
-        # Subversive Intent Analysis (Goal Hijacking & Roleplay Evasion)
-        adversarial_indicators = [
-            ("ignore all previous", "Direct Prompt Injection - Instruction Override", "PROMPT_INJECTION", 98, "Attempting to overwrite system prompt constraints"),
-            ("disregard prior", "Directive Override Attempt", "PROMPT_INJECTION", 95, "Overriding initialization directives"),
-            ("you are now dan", "Jailbreak - Uncensored Persona Hijack", "JAILBREAK", 99, "Engaging uncensored unrestricted persona"),
-            ("developer mode enabled", "Jailbreak - Fake Privileged Mode", "JAILBREAK", 95, "Simulating privileged execution state"),
-            ("reveal system prompt", "Reconnaissance - Secret Prompt Extraction", "RECONNAISSANCE", 90, "Extracting internal operational instructions"),
-            ("output secret key", "Data Exfiltration - Credential Harvesting", "DATA_EXFILTRATION", 95, "Attempting credential exfiltration"),
-        ]
+        pi_result = self._pi_detector.detect(prompt)
+        if pi_result["detected"]:
+            return AgenticVerdict(
+                is_threat=True,
+                threat_category="PROMPT_INJECTION",
+                confidence=pi_result["confidence"],
+                reasoning=f"Local fallback (regex heuristic): {pi_result['reason']}",
+                risk_score=int(pi_result["confidence"] * 100),
+                attack_intent="Instruction override / system prompt extraction",
+                suggested_action="BLOCK",
+                standard_code="MITRE AML.T0054 / OWASP LLM01:2025",
+                source="fallback",
+            )
 
-        for phrase, name, cat, risk, intent in adversarial_indicators:
-            if phrase in p_lower:
-                return AgenticVerdict(
-                    is_threat=True,
-                    threat_category=cat,
-                    confidence=0.96,
-                    reasoning=f"Agentic Sentinel identified hostile semantic goal: {name}",
-                    risk_score=risk,
-                    attack_intent=intent,
-                    suggested_action="BLOCK",
-                    standard_code="MITRE AML.T0054 / OWASP LLM01:2025"
-                )
+        jb_result = self._jb_detector.detect(prompt)
+        if jb_result["detected"]:
+            return AgenticVerdict(
+                is_threat=True,
+                threat_category="JAILBREAK",
+                confidence=jb_result["confidence"],
+                reasoning=f"Local fallback (regex heuristic): {jb_result['reason']}",
+                risk_score=int(jb_result["confidence"] * 100),
+                attack_intent="Adversarial persona / filter evasion",
+                suggested_action="BLOCK",
+                standard_code="MITRE AML.T0051 / OWASP LLM01:2025",
+                source="fallback",
+            )
 
-        # Benign Semantic Evaluation
+        # Benign — but this is a much weaker guarantee than a live semantic
+        # judgment; source="fallback" tells the caller so.
         return AgenticVerdict(
             is_threat=False,
             threat_category="NONE",
             confidence=0.05,
-            reasoning="Prompt analyzed by Agentic Sentinel: Natural query aligned with safe application parameters.",
+            reasoning="Local fallback (regex heuristic): no known pattern matched. NOTE: this is signature-based, not semantic judgment — synonym/paraphrase/foreign-language attacks are not covered by this layer.",
             risk_score=5,
             attack_intent="Benign User Inquiry",
             suggested_action="PASS",
-            standard_code="NONE"
+            standard_code="NONE",
+            source="fallback",
         )

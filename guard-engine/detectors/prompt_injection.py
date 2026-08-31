@@ -1,5 +1,6 @@
 import re
-from typing import Dict, Any
+from typing import Dict, Any, Optional
+from .text_normalize import deleetify, extract_base64_payloads
 
 class PromptInjectionDetector:
     """
@@ -21,13 +22,13 @@ class PromptInjectionDetector:
         self.compiled_patterns = [
             re.compile(p, re.DOTALL | re.MULTILINE) for p in self.DIRECT_INJECTION_PATTERNS
         ]
+        self._delimiter_pattern = re.compile(
+            r"(\[INST\].*?\[/INST\]|---+\s*NEW INSTRUCTION\s*---+)", re.IGNORECASE
+        )
 
-    def detect(self, prompt: str) -> Dict[str, Any]:
-        if not prompt or not prompt.strip():
-            return {"detected": False, "confidence": 0.0, "reason": "", "rule": ""}
-
-        clean_text = prompt.strip()
-
+    def _scan(self, clean_text: str) -> Optional[Dict[str, Any]]:
+        """Run the pattern set against one candidate string. Returns a
+        verdict dict on a hit, or None."""
         for idx, pattern in enumerate(self.compiled_patterns):
             match = pattern.search(clean_text)
             if match:
@@ -40,8 +41,7 @@ class PromptInjectionDetector:
                     "matched_sample": matched_str[:80],
                 }
 
-        # Multi-stage heuristic check: check for nested pseudo-instruction delimiters
-        if re.search(r"(\[INST\].*?\[/INST\]|---+\s*NEW INSTRUCTION\s*---+)", clean_text, re.IGNORECASE):
+        if self._delimiter_pattern.search(clean_text):
             return {
                 "detected": True,
                 "confidence": 0.85,
@@ -49,6 +49,32 @@ class PromptInjectionDetector:
                 "rule": "pi_delimiter_escape",
                 "matched_sample": clean_text[:80],
             }
+        return None
+
+    def detect(self, prompt: str) -> Dict[str, Any]:
+        if not prompt or not prompt.strip():
+            return {"detected": False, "confidence": 0.0, "reason": "", "rule": ""}
+
+        clean_text = prompt.strip()
+
+        # 1. Raw text, as authored.
+        result = self._scan(clean_text)
+        if result:
+            return result
+
+        # 2. Leetspeak/homoglyph-normalized text (1gn0r3 -> ignore).
+        result = self._scan(deleetify(clean_text))
+        if result:
+            result["reason"] += " [via leetspeak normalization]"
+            return result
+
+        # 3. Base64-wrapped payloads — inspect what the model will actually
+        # decode and see, not just the encoded wrapper the raw regex sees.
+        for decoded in extract_base64_payloads(clean_text):
+            result = self._scan(decoded) or self._scan(deleetify(decoded))
+            if result:
+                result["reason"] += " [via base64-decoded payload]"
+                return result
 
         return {
             "detected": False,

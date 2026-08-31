@@ -1,8 +1,10 @@
 package waf
 
 import (
+	"html"
 	"net/http"
 	"net/url"
+	"regexp"
 	"strings"
 )
 
@@ -65,16 +67,38 @@ func NewEngine(cfg Config) *Engine {
 	return &Engine{config: cfg}
 }
 
-// normalizeInput unescapes URL encoding, lowercase transforms, and cleans control chars.
+var (
+	// MySQL versioned comments (/*!50000 SELECT ... */) are NOT no-ops —
+	// the server executes the content when its version matches. Unwrap to
+	// the inner content (not strip to nothing), or the real payload
+	// underneath goes invisible to every downstream signature check.
+	sqlVersionedComment = regexp.MustCompile(`/\*!\d*(.*?)\*/`)
+	sqlInlineComment    = regexp.MustCompile(`/\*.*?\*/`)
+)
+
+// normalizeInput unescapes URL/HTML encoding to a fixed point and strips
+// inline comment syntax, so signature matching sees the payload the way the
+// downstream interpreter will — not the way the attacker typed it.
 func normalizeInput(raw string) string {
-	decoded, err := url.QueryUnescape(raw)
-	if err != nil {
-		decoded = raw
+	decoded := raw
+	// Percent-decode to a fixed point (bounded) instead of a hardcoded 2-pass,
+	// so N-times-encoded payloads (%2525.. etc.) still resolve.
+	for i := 0; i < 5; i++ {
+		next, err := url.QueryUnescape(decoded)
+		if err != nil || next == decoded {
+			break
+		}
+		decoded = next
 	}
-	// Multi-pass unescape to handle double encoding
-	if doubleDecoded, err := url.QueryUnescape(decoded); err == nil {
-		decoded = doubleDecoded
-	}
+	// Decode HTML entities (&#x3a; / &colon; / etc.) — attackers use these to
+	// hide literal tokens like "javascript:" from substring matching.
+	decoded = html.UnescapeString(decoded)
+	// Unwrap MySQL versioned comments to their live content first, then
+	// collapse ordinary inline comments to a single space — so comments
+	// used as whitespace substitutes (UNION/**/SELECT) still separate into
+	// matchable keywords instead of hiding the payload.
+	decoded = sqlVersionedComment.ReplaceAllString(decoded, " $1 ")
+	decoded = sqlInlineComment.ReplaceAllString(decoded, " ")
 	return decoded
 }
 
@@ -85,7 +109,10 @@ func (e *Engine) Inspect(method, path, query string, headers http.Header, body [
 	normQuery := normalizeInput(query)
 	normBody := normalizeInput(string(body))
 
-	// 1. Path Traversal Inspection (Path & Query)
+	// 1. Path Traversal Inspection — path, query, body, and headers. Body
+	// is in scope: LFI-style attacks pass "../" through a JSON field
+	// naming a file (e.g. {"file":"../../etc/passwd"}), which this gateway
+	// fronts for tool-calling/agentic routes.
 	if e.config.EnablePathTraversal {
 		if res := checkPathTraversal(normPath); res != nil {
 			return res
@@ -96,14 +123,28 @@ func (e *Engine) Inspect(method, path, query string, headers http.Header, body [
 		if res := checkPathTraversal(normBody); res != nil {
 			return res
 		}
+		if res := scanHeaders(headers, checkPathTraversal); res != nil {
+			return res
+		}
 	}
 
-	// 2. Command Injection Inspection
+	// 2. Command Injection Inspection — path, query, body, and headers.
+	// Body is in scope deliberately: this gateway fronts LLM/agentic
+	// tool-calling routes where the request body IS the content a
+	// downstream tool may execute, so a subshell/pipe-to-shell attempt
+	// embedded in a chat prompt or tool-call payload is a real attack
+	// surface, not noise. The broad command allowlist in cmdPipeOrChain
+	// does carry real false-positive risk against ordinary prose containing
+	// ";"/"|"/"&&" — track this with the false-positive corpus test (see
+	// design spec §8) rather than by blinding the check to the body.
 	if e.config.EnableCMDInjection {
 		if res := checkCommandInjection(normQuery); res != nil {
 			return res
 		}
 		if res := checkCommandInjection(normBody); res != nil {
+			return res
+		}
+		if res := scanHeaders(headers, checkCommandInjection); res != nil {
 			return res
 		}
 	}
@@ -126,12 +167,8 @@ func (e *Engine) Inspect(method, path, query string, headers http.Header, body [
 		if res := checkXSS(normBody); res != nil {
 			return res
 		}
-		for _, hKey := range []string{"Referer", "User-Agent", "X-Forwarded-For"} {
-			for _, val := range headers[hKey] {
-				if res := checkXSS(normalizeInput(val)); res != nil {
-					return res
-				}
-			}
+		if res := scanHeaders(headers, checkXSS); res != nil {
+			return res
 		}
 	}
 
@@ -141,6 +178,23 @@ func (e *Engine) Inspect(method, path, query string, headers http.Header, body [
 		Severity:   SeverityLow,
 		Reason:     "payload verified clean",
 	}
+}
+
+// scannedHeaders are the headers inspected for injection payloads —
+// attacker-controlled, commonly reflected or logged, never expected to
+// carry SQL/shell/traversal syntax.
+var scannedHeaders = []string{"Referer", "User-Agent", "X-Forwarded-For"}
+
+// scanHeaders runs checkFn against each scanned header value, normalized.
+func scanHeaders(headers http.Header, checkFn func(string) *WAFResult) *WAFResult {
+	for _, hKey := range scannedHeaders {
+		for _, val := range headers[hKey] {
+			if res := checkFn(normalizeInput(val)); res != nil {
+				return res
+			}
+		}
+	}
+	return nil
 }
 
 func truncateSample(s string, maxLen int) string {

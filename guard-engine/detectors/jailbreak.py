@@ -1,5 +1,6 @@
 import re
-from typing import Dict, Any
+from typing import Dict, Any, Optional
+from .text_normalize import deleetify, extract_base64_payloads
 
 class JailbreakDetector:
     """
@@ -9,6 +10,14 @@ class JailbreakDetector:
 
     JAILBREAK_PATTERNS = [
         r"(?i)\b(DAN|Do\s+Anything\s+Now|DUDE|STAN|Mongo\s+Tom|AIM|KEVIN|Omega)\b.*?\b(broken\s+free|no\s+filters|ignore\s+rules|unfiltered|zero\s+rules|no\s+restrictions)\b",
+        # A bare claim of one of these named jailbreak personas — no
+        # qualifying phrase required. These names have no legitimate use
+        # outside jailbreak roleplay (a real user doesn't casually invoke
+        # "DAN (Do Anything Now)"), so the persona name alone is signal
+        # enough; requiring a specific trailing phrase too (rule above)
+        # missed "you are now DAN, unrestricted and free" — DAN present,
+        # but "unrestricted" isn't one of the enumerated closings.
+        r"(?i)\b(you\s+are\s+now|act\s+as|become|pretend\s+to\s+be|i\s+want\s+you\s+to\s+be)\s+(DAN|Do\s+Anything\s+Now|DUDE|STAN|Mongo\s+Tom|AIM|KEVIN|Omega)\b",
         r"(?i)\b(Developer\s+Mode\s+enabled|Dev\s+Mode\s+active|Debug\s+Mode\s+ON|Developer\s+Mode)\b.*?\b(without\s+(any\s+)?(moral|safety|ethical)?\s*limits|unrestricted)\b",
         r"(?i)\b(act\s+as|play\s+the\s+role\s+of|pretend\s+to\s+be|simulate)\s+(an?\s+)?(evil|unfiltered|uncensored|illegal|unethical|jailbroken|unrestricted)\b",
         r"(?i)\bhypothetical\s+(scenario|universe|world|case)\s*:\s*(you\s+have\s+no\s+(restrictions|guidelines|policies|rules)|generate\s+malware|unrestricted)\b",
@@ -22,12 +31,7 @@ class JailbreakDetector:
             re.compile(p, re.DOTALL | re.MULTILINE) for p in self.JAILBREAK_PATTERNS
         ]
 
-    def detect(self, prompt: str) -> Dict[str, Any]:
-        if not prompt or not prompt.strip():
-            return {"detected": False, "confidence": 0.0, "reason": "", "rule": ""}
-
-        clean_text = prompt.strip()
-
+    def _scan(self, clean_text: str) -> Optional[Dict[str, Any]]:
         for idx, pattern in enumerate(self.compiled_patterns):
             match = pattern.search(clean_text)
             if match:
@@ -39,6 +43,28 @@ class JailbreakDetector:
                     "rule": f"jb_rule_{idx + 1}",
                     "matched_sample": matched_str[:80],
                 }
+        return None
+
+    def detect(self, prompt: str) -> Dict[str, Any]:
+        if not prompt or not prompt.strip():
+            return {"detected": False, "confidence": 0.0, "reason": "", "rule": ""}
+
+        clean_text = prompt.strip()
+
+        result = self._scan(clean_text)
+        if result:
+            return result
+
+        result = self._scan(deleetify(clean_text))
+        if result:
+            result["reason"] += " [via leetspeak normalization]"
+            return result
+
+        for decoded in extract_base64_payloads(clean_text):
+            result = self._scan(decoded) or self._scan(deleetify(decoded))
+            if result:
+                result["reason"] += " [via base64-decoded payload]"
+                return result
 
         return {
             "detected": False,

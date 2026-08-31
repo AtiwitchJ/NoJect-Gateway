@@ -11,6 +11,7 @@ from detectors.prompt_injection import PromptInjectionDetector
 from detectors.jailbreak import JailbreakDetector
 from detectors.pii_masker import PIIMasker
 from detectors.canary_shield import CanaryShield
+from detectors.agentic_sentinel import AgenticSentinel
 
 app = FastAPI(title="NoJect AI Guard Engine", version="1.0.0")
 
@@ -19,11 +20,21 @@ prompt_injection_detector = PromptInjectionDetector()
 jailbreak_detector = JailbreakDetector()
 pii_masker = PIIMasker()
 canary_shield = CanaryShield()
+# Reads NOJECT_SENTINEL_* env vars once at startup. If no API key is
+# configured, .api_key is falsy and inspect_request skips calling it
+# entirely (see below) rather than silently re-running the same regex
+# checks steps 1-2 already did, under a fancier name.
+agentic_sentinel = AgenticSentinel()
 
 class GuardPolicies(BaseModel):
     enable_prompt_injection: bool = True
     enable_jailbreak: bool = True
     enable_pii_masking: bool = True
+    # Off by default: unlike the other layers this makes a real network
+    # call to a paid LLM API per request (~1-5s latency, per-call cost).
+    # A route opts in deliberately via configs/gateway.yaml, it is never
+    # silently enabled.
+    enable_agentic_sentinel: bool = False
     sensitivity_threshold: float = 0.7
 
 class InspectRequestPayload(BaseModel):
@@ -51,6 +62,15 @@ class InspectOutputResponse(BaseModel):
     sanitized_response: str
     threat_type: str
     reason: str
+
+def _risk_level_from_score(risk_score: int) -> str:
+    if risk_score >= 90:
+        return "CRITICAL"
+    if risk_score >= 70:
+        return "HIGH"
+    if risk_score >= 40:
+        return "MEDIUM"
+    return "LOW"
 
 @app.get("/healthz")
 def healthz():
@@ -85,6 +105,23 @@ def inspect_request(payload: InspectRequestPayload):
                 risk_level="HIGH",
                 confidence=jb_res["confidence"],
                 reason=jb_res["reason"],
+            )
+
+    # 2.5. Agentic Sentinel (LLM-as-a-Judge) — opt-in, semantic layer.
+    # Skipped entirely when no live key is configured: with no key,
+    # AgenticSentinel would itself fall back to the same PromptInjection/
+    # Jailbreak detectors steps 1-2 already ran, so calling it adds cost
+    # (a full judge_prompt_sync call) for zero additional coverage.
+    if policies.enable_agentic_sentinel and agentic_sentinel.api_key:
+        verdict = agentic_sentinel.judge_prompt_sync(current_prompt)
+        if verdict.is_threat and verdict.confidence >= policies.sensitivity_threshold:
+            return InspectRequestResponse(
+                allowed=False,
+                sanitized_prompt=current_prompt,
+                threat_type=verdict.threat_category,
+                risk_level=_risk_level_from_score(verdict.risk_score),
+                confidence=verdict.confidence,
+                reason=f"{verdict.reasoning} [Agentic Sentinel, source={verdict.source}]",
             )
 
     # 3. PII Masking

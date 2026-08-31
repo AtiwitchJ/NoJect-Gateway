@@ -292,7 +292,7 @@ func (h *GatewayHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	var guardReason string
 	var guardConfidence float64
 
-	if (route.Guardrails.PromptInjection || route.Guardrails.Jailbreak || route.Guardrails.PIIMasking) && h.guardClient != nil {
+	if (route.Guardrails.PromptInjection || route.Guardrails.Jailbreak || route.Guardrails.PIIMasking || route.Guardrails.AgenticSentinel) && h.guardClient != nil {
 		promptText := extractPrompt(body)
 		if promptText != "" {
 			guardReq := guardclient.InspectRequestPayload{
@@ -303,6 +303,7 @@ func (h *GatewayHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 					EnablePromptInjection: route.Guardrails.PromptInjection,
 					EnableJailbreak:       route.Guardrails.Jailbreak,
 					EnablePIIMasking:      route.Guardrails.PIIMasking,
+					EnableAgenticSentinel: route.Guardrails.AgenticSentinel,
 					SensitivityThreshold:  0.7,
 				},
 			}

@@ -16,10 +16,14 @@ type Policies struct {
 	EnablePromptInjection bool    `json:"enable_prompt_injection"`
 	EnableJailbreak       bool    `json:"enable_jailbreak"`
 	EnablePIIMasking      bool    `json:"enable_pii_masking"`
+	EnableAgenticSentinel bool    `json:"enable_agentic_sentinel"`
 	SensitivityThreshold  float64 `json:"sensitivity_threshold"`
 }
 
-// DefaultPolicies provides secure baseline policies.
+// DefaultPolicies provides secure baseline policies. AgenticSentinel is
+// deliberately excluded — it is a real per-request LLM API call (cost +
+// 1-5s latency), so it stays opt-in per route rather than a default-on
+// guardrail alongside the free/local ones.
 func DefaultPolicies() Policies {
 	return Policies{
 		EnablePromptInjection: true,

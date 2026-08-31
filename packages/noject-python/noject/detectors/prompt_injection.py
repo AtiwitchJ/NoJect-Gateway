@@ -3,7 +3,8 @@ Prompt Injection Detector (MITRE AML.T0054 / OWASP LLM01:2025)
 """
 
 import re
-from typing import Dict, Any
+from typing import Dict, Any, Optional
+from .text_normalize import deleetify, extract_base64_payloads
 
 class PromptInjectionDetector:
     DIRECT_INJECTION_PATTERNS = [
@@ -19,10 +20,7 @@ class PromptInjectionDetector:
     def __init__(self):
         self.patterns = [re.compile(p) for p in self.DIRECT_INJECTION_PATTERNS]
 
-    def detect(self, text: str) -> Dict[str, Any]:
-        if not text:
-            return {"detected": False, "confidence": 0.0, "reason": "Empty input"}
-
+    def _scan(self, text: str) -> Optional[Dict[str, Any]]:
         for idx, pattern in enumerate(self.patterns):
             match = pattern.search(text)
             if match:
@@ -33,5 +31,25 @@ class PromptInjectionDetector:
                     "matched_sample": match.group(0)[:80],
                     "standard_code": "MITRE AML.T0054 / OWASP LLM01:2025"
                 }
+        return None
+
+    def detect(self, text: str) -> Dict[str, Any]:
+        if not text:
+            return {"detected": False, "confidence": 0.0, "reason": "Empty input"}
+
+        result = self._scan(text)
+        if result:
+            return result
+
+        result = self._scan(deleetify(text))
+        if result:
+            result["reason"] += " [via leetspeak normalization]"
+            return result
+
+        for decoded in extract_base64_payloads(text):
+            result = self._scan(decoded) or self._scan(deleetify(decoded))
+            if result:
+                result["reason"] += " [via base64-decoded payload]"
+                return result
 
         return {"detected": False, "confidence": 0.0, "reason": "No prompt injection detected"}

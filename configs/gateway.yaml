@@ -52,6 +52,10 @@ routes:
       jailbreak: true
       pii_masking: true
       output_guard: true
+      # Opt-in semantic layer (LLM-as-a-Judge). Real API call + cost per
+      # request; also requires NOJECT_SENTINEL_API_KEY on the guard-engine
+      # side or this is a no-op. See guard-engine/detectors/agentic_sentinel.py.
+      agentic_sentinel: false
 
   # Generic Backend REST API Route with Fast-Path WAF protection
   - id: "backend-rest-api"
@@ -66,6 +70,7 @@ routes:
       jailbreak: false
       pii_masking: false
       output_guard: false
+      agentic_sentinel: false
 
 audit:
   driver: "file"

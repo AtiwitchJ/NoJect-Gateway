@@ -5,8 +5,15 @@ import (
 )
 
 var (
-	xssScriptTag    = regexp.MustCompile(`(?i)<\s*script[^>]*>.*?<\s*/\s*script\s*>|<\s*script[^>]*>`)
-	xssEventHandler = regexp.MustCompile(`(?i)<\s*[a-zA-Z0-9_-]+[^>]*\s+(on(?:error|load|click|mouseover|submit|focus|blur|change|input|pointerdown))\s*=`)
+	xssScriptTag = regexp.MustCompile(`(?i)<\s*script[^>]*>.*?<\s*/\s*script\s*>|<\s*script[^>]*>`)
+	// Matches ANY on*="..." event-handler attribute (onload, onerror,
+	// ontoggle, onwheel, ...), not an enumerated allowlist of handler
+	// names — an allowlist here misses the majority of the ~150 DOM event
+	// handlers browsers support. Separator is space OR "/", since HTML
+	// tolerates "/" between attributes in self-closing-style tags
+	// (<svg/onload=...> is valid and a well-known WAF-bypass technique
+	// against handler regexes that require a literal space).
+	xssEventHandler  = regexp.MustCompile(`(?i)<\s*[a-zA-Z0-9_-]+\b[^>]*[\s/]on[a-zA-Z]+\s*=`)
 	xssJavascriptURI = regexp.MustCompile(`(?i)\bjavascript\s*:\s*[^\s]+`)
 	xssDangerousTags = regexp.MustCompile(`(?i)<\s*(iframe|object|embed|applet|meta\s+http-equiv)\b[^>]*>`)
 )

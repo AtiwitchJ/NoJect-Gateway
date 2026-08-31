@@ -7,11 +7,17 @@ import (
 
 // RouteGuardrails enables or disables specific security and AI guardrail checks per route.
 type RouteGuardrails struct {
-	FastWAF          bool `json:"fast_waf" yaml:"fast_waf"`
-	PromptInjection  bool `json:"prompt_injection" yaml:"prompt_injection"`
-	Jailbreak        bool `json:"jailbreak" yaml:"jailbreak"`
-	PIIMasking       bool `json:"pii_masking" yaml:"pii_masking"`
-	OutputGuard      bool `json:"output_guard" yaml:"output_guard"`
+	FastWAF         bool `json:"fast_waf" yaml:"fast_waf"`
+	PromptInjection bool `json:"prompt_injection" yaml:"prompt_injection"`
+	Jailbreak       bool `json:"jailbreak" yaml:"jailbreak"`
+	PIIMasking      bool `json:"pii_masking" yaml:"pii_masking"`
+	OutputGuard     bool `json:"output_guard" yaml:"output_guard"`
+	// AgenticSentinel opts a route into the LLM-as-a-Judge semantic layer.
+	// Off by default even when this is true at the route level unless the
+	// guard-engine itself has a live API key configured — see
+	// guard-engine/server.py. Real network call + real cost per request;
+	// never enable silently.
+	AgenticSentinel bool `json:"agentic_sentinel" yaml:"agentic_sentinel"`
 }
 
 // Route defines an upstream routing destination and its security policies.
