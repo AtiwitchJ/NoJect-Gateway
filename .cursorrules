@@ -1,0 +1,9 @@
+# NoJect Cursor & Agent Rules
+
+- Project: NoJect 🛡️ Agentic AI Security Sentinel & API Gateway
+- Read AGENTS.md and CLAUDE.md for full context and architecture.
+- Follow hybrid tiered defense: Go Fast WAF (< 0.001 ms) + Python/TS Agentic Sentinel (LLM-as-a-Judge).
+- Support Astral `uv` for Python package (`packages/noject-python`).
+- Support TypeScript/npm for TS package (`packages/noject-ts`).
+- Ensure all tests pass: `make test`.
+- ISO wording: "Architected in Alignment with ISO/IEC 27001:2022 & ISO/IEC 42001:2023 Principles".
