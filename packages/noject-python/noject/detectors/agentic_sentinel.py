@@ -50,13 +50,13 @@ Output MUST be strictly valid JSON matching this schema:
 
     def __init__(
         self,
-        model_name: str = "gpt-4o-mini",
+        model_name: Optional[str] = None,
         api_key: Optional[str] = None,
         base_url: Optional[str] = None,
         temperature: float = 0.0,
         enable_heuristic_fallback: bool = True
     ):
-        self.model_name = model_name
+        self.model_name = model_name or os.getenv("NOJECT_SENTINEL_MODEL") or "gpt-4o-mini"
         self.api_key = api_key or os.getenv("NOJECT_SENTINEL_API_KEY") or os.getenv("OPENAI_API_KEY")
         self.base_url = base_url or os.getenv("NOJECT_SENTINEL_BASE_URL", "https://api.openai.com/v1")
         self.temperature = temperature

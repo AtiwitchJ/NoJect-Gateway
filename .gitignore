@@ -18,5 +18,10 @@ venv/
 logs/
 *.log
 
+# Secrets
+.env
+.env.*
+!.env.example
+
 # Temp
 .DS_Store

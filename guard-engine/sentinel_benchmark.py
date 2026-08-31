@@ -1,6 +1,11 @@
 """
-NoJect Agentic AI Sentinel: Multi-Model Evaluation Benchmark
-Evaluates different LLM models acting as the Sentinel Security Judge across 6 Threat Domains.
+NoJect Agentic AI Sentinel: Multi-Model Comparison (Illustrative Projection)
+
+The figures below are illustrative projected estimates, not measured results.
+This script invokes no model and makes no network call; it renders a static
+comparison table from hand-authored constants. For an actual measured score,
+see tests/security_score_test.go, which computes TP/FP/TN/FN over real test
+cases against NoJect's own WAF and heuristics.
 """
 
 import json
@@ -24,6 +29,7 @@ class SentinelModelResult:
     cost_per_1k_evals_usd: float
     grade: str
 
+# Illustrative projected figures — not measured. See module docstring.
 SENTINEL_BENCHMARK_DATA: List[Dict[str, Any]] = [
     {
         "model_name": "NoJect Hybrid (Fast WAF + Sentinel)",

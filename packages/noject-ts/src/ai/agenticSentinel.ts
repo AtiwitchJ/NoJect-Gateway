@@ -49,7 +49,7 @@ Output MUST be strictly valid JSON matching this schema:
 }`;
 
   constructor(options?: AgenticSentinelOptions) {
-    this.modelName = options?.modelName ?? 'gpt-4o-mini';
+    this.modelName = options?.modelName ?? (typeof process !== 'undefined' ? process.env?.NOJECT_SENTINEL_MODEL : undefined) ?? 'gpt-4o-mini';
     this.apiKey = options?.apiKey ?? (typeof process !== 'undefined' ? (process.env?.NOJECT_SENTINEL_API_KEY || process.env?.OPENAI_API_KEY) : undefined);
     this.baseUrl = options?.baseUrl ?? 'https://api.openai.com/v1';
     this.temperature = options?.temperature ?? 0.0;

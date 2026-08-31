@@ -18,8 +18,8 @@ Please refer to [AGENTS.md](AGENTS.md) for full context, architecture details, a
 - Build: `cd packages/noject-ts && npm run build`
 
 ### Go Core Gateway
-- Test: `go test -v ./...`
-- Build: `go build -o bin/noject-gateway cmd/gateway/main.go`
+- Test: `make test-go`
+- Build: `make build`
 
 ### Important Rules
 - Maintain 100% test passing score on all 90 attack vectors.

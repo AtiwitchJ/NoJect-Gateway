@@ -1,9 +1,9 @@
 .PHONY: all build test test-go test-py test-python-lib test-ts-lib test-libs build-libs lint clean proto run-gateway run-guard
 
-GO ?= /Users/up-mac/.local/go/bin/go
-PYTHON ?= /opt/miniconda3/bin/python
-UV ?= /opt/miniconda3/bin/uv
-NPM ?= /Users/up-mac/.local/bin/npm
+GO ?= go
+PYTHON ?= python3
+UV ?= uv
+NPM ?= npm
 
 all: build build-libs
 
@@ -13,6 +13,12 @@ build:
 build-libs:
 	cd packages/noject-python && $(UV) build
 	cd packages/noject-ts && $(NPM) run build
+
+run-gateway:
+	$(GO) run ./cmd/gateway
+
+run-guard:
+	cd guard-engine && $(PYTHON) server.py
 
 test: test-go test-py test-libs
 

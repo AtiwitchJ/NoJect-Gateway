@@ -13,8 +13,12 @@ from detectors.canary_shield import CanaryShield
 
 class ModelProfile:
     """
-    Empirical baseline defense and latency profile for downstream LLM models.
-    Based on published security research (JailbreakBench, NotInject, OWASP LLM Benchmark).
+    Assumed baseline defense and latency constants for downstream LLM models,
+    used to project NoJect's defense uplift. These are not measurements taken
+    by this codebase and are not sourced from a specific cited study — treat
+    them as illustrative assumptions, informed by general public reporting on
+    prompt-injection/jailbreak resistance (e.g. JailbreakBench-style work),
+    not as a benchmark result.
     """
     def __init__(self, name: str, provider: str, native_pi_defense: float, native_jb_defense: float, avg_base_latency_ms: float):
         self.name = name

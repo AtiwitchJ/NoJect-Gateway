@@ -8,7 +8,7 @@ Welcome, AI Agent / Assistant! This repository contains **NoJect (No-Injection)*
 
 1. **Agentic AI Sentinel First**: NoJect is fundamentally an **Autonomous AI Security Sentinel** that uses LLM reasoning (LLM-as-a-Judge) for deep semantic threat detection, not just static regex rules.
 2. **Hybrid Tiered Architecture**:
-   - **Tier 1 (Go Ingress Core < 0.001 ms)**: Deterministic Fast-Path WAF for traditional web injections (SQLi, XSS, CMD, Path Traversal) and Multi-Auth (Argon2, JWT, HMAC).
+   - **Tier 1 (Go Ingress Core < 0.001 ms)**: Deterministic Fast-Path WAF for traditional web injections (SQLi, XSS, CMD, Path Traversal) and Multi-Auth (SHA-256 API Keys, JWT, HMAC). API keys are high-entropy random tokens, so they are hashed with SHA-256 and compared in constant time — not Argon2, which is a deliberately slow password KDF that would blow the sub-millisecond budget.
    - **Tier 2 (Agentic AI Sentinel)**: Deep semantic intent analysis for Prompt Injections (`MITRE AML.T0054`), Jailbreaks (`AML.T0051`), Reconnaissance (`AML.T0043`), and PII Masking (`ISO 42001 Control B.7.2`).
    - **Tier 3 (Upstream & Egress)**: Upstream LLMs (OpenAI, Claude, Gemini, DeepSeek, Ollama/vLLM) + Outbound Canary Token Secret Shield + Cryptographic SHA-256 Hash Chained Audit Trail (`ISO 27001 Control A.8.15`).
 3. **Dual Delivery Model**:
@@ -26,12 +26,20 @@ NoJect/
 │   └── gateway/main.go            # Go Gateway Entrypoint (CLI flags, startup, router)
 ├── internal/
 │   ├── audit/                      # Cryptographic SHA-256 Hash Chaining Audit Logger
-│   ├── auth/                       # Multi-Auth Engine (Argon2 API Keys, JWT/OIDC, HMAC)
+│   ├── auth/                       # Multi-Auth Engine (SHA-256 API Keys, JWT/OIDC, HMAC)
 │   ├── config/                     # YAML Configuration Loader
-│   ├── metrics/                    # Prometheus Metrics Exporter & Realtime SOC Dashboard
-│   ├── proxy/                      # L7 Reverse Proxy & Dynamic Upstream Dispatcher
-│   ├── ratelimit/                  # Token Bucket Rate Limiter
+│   ├── dashboard/                  # Embedded HTML Web SOC Dashboard (dashboard.go)
+│   ├── guardclient/                # HTTP Client to the Python Guard Engine
+│   ├── metrics/                    # Prometheus Metrics Exporter
+│   ├── router/                     # L7 Reverse Proxy & Upstream Dispatcher (proxy.go)
 │   └── waf/                        # Sub-millisecond Regex & Lexical Fast WAF Engine
+├── proto/
+│   └── guard.proto                 # gRPC contract for guard-engine — drafted, not yet wired up;
+│                                    # the current gateway<->guard transport is plain HTTP/JSON
+│                                    # via internal/guardclient (see roadmap below)
+├── tests/                          # Top-level Go E2E and security-score test harness
+│   ├── e2e_test.go
+│   └── security_score_test.go      # TP/FP/TN/FN scoring across attack-vector cases
 ├── guard-engine/                   # Standalone Python AI Guardrail & Sentinel Service
 │   ├── detectors/
 │   │   ├── agentic_sentinel.py     # LLM-as-a-Judge Cognitive Security Sentinel Agent
@@ -100,8 +108,8 @@ make all
 
 # 4. Run sub-test suites individually:
 make test-go            # Go unit & E2E tests
-make test-guard         # Python guard-engine pytest
-make test-py-lib        # Python library pytest (via uv run pytest)
+make test-py            # Python guard-engine pytest
+make test-python-lib    # Python library pytest (via uv run pytest)
 make test-ts-lib        # TypeScript library tests (via npm test)
 ```
 
@@ -109,7 +117,7 @@ make test-ts-lib        # TypeScript library tests (via npm test)
 
 ## 📌 Coding Conventions & Golden Rules for Agents
 
-1. **Zero-Bypass Accuracy**: Do not weaken regex patterns or semantic heuristics. Ensure all 90 standard attack vector tests pass 100%.
+1. **Zero-Bypass Accuracy**: Any pattern or heuristic change must not regress the detection rate or false-positive rate measured by `tests/security_score_test.go`. Narrowing a pattern to cut false positives is fine when that test shows no detection loss — the target is the measured outcome, not "never touch a pattern."
 2. **Sub-Millisecond Fast Path**: Keep Go Fast-Path WAF latency under **0.001 ms (1 µs)** and total Gateway pipeline under **0.009 ms (9 µs)**.
 3. **Astral `uv` Compatibility**: Whenever modifying `packages/noject-python/`, ensure compatibility with both Astral `uv` (`uv add`, `uv run pytest`, `uv build`) and standard `pip`/`build`.
 4. **TypeScript Strictness**: Keep TypeScript strict mode enabled (`noImplicitAny`, full `.d.ts` declaration generation).
@@ -122,7 +130,7 @@ make test-ts-lib        # TypeScript library tests (via npm test)
 
 If the user asks for new features or further development, here are the planned roadmap items:
 
-- [ ] **gRPC Bidirectional Streaming Interface**: Add streaming gRPC inspection for ultra-high throughput LLM token streaming (SSE / chunks).
-- [ ] **Modern React/Tailwind Web SOC UI**: Upgrade the embedded HTML dashboard (`internal/metrics/dashboard.go`) into a rich React SPA with live WebSocket threat telemetry.
+- [ ] **gRPC Bidirectional Streaming Interface**: `proto/guard.proto` already drafts this contract; implement the Go and Python sides and switch `internal/guardclient` off plain HTTP/JSON onto it for ultra-high throughput LLM token streaming (SSE / chunks).
+- [ ] **Modern React/Tailwind Web SOC UI**: Upgrade the embedded HTML dashboard (`internal/dashboard/dashboard.go`) into a rich React SPA with live WebSocket threat telemetry.
 - [ ] **Kubernetes Helm Chart & Envoy WASM Filter**: Package NoJect as a Kubernetes Ingress Controller and Envoy WASM filter for service mesh integration (Istio / Cilium).
 - [ ] **Dynamic Zero-Day Rule Sync**: Cloud / GitHub action mechanism to automatically sync latest MITRE ATLAS threat feeds into local heuristics.
