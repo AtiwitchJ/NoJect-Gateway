@@ -30,7 +30,7 @@ test-python-lib:
 test-ts-lib:
 	cd packages/noject-ts && $(NPM) test
 
-bench: bench-go bench-py bench-models
+bench: bench-go bench-py bench-models bench-sentinels
 
 bench-go:
 	$(GO) test -bench=. -benchmem -run=^$$ ./internal/waf/... ./internal/audit/...
@@ -40,6 +40,9 @@ bench-py:
 
 bench-models:
 	$(PYTHON) guard-engine/model_evaluator.py
+
+bench-sentinels:
+	$(PYTHON) guard-engine/sentinel_benchmark.py
 
 clean:
 	rm -rf bin/ logs/ *.log packages/noject-python/dist packages/noject-ts/dist
