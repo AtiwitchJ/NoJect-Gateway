@@ -1,5 +1,8 @@
 # 🛡️ NoJect Executive Infographic & Presentation Deck
-### Universal AI & Security API Gateway (ISO 27001 / ISO 42001 / ISO 27034)
+### Universal AI & Security API Gateway (Architected Aligned with ISO 27001 & ISO 42001 Principles)
+
+> [!NOTE]
+> **ISO Alignment Statement**: NoJect is engineered in strict accordance with the control requirements and architectural principles of **ISO/IEC 27001:2022** and **ISO/IEC 42001:2023** to provide an ISO-ready technical baseline.
 
 <p align="center">
   <img src="assets/noject_master_infographic.png" alt="NoJect Master Executive Infographic" width="1000"/>

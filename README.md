@@ -1,11 +1,15 @@
 # NoJect 🛡️
-### Universal AI & Security API Gateway (ISO/IEC 27001 & ISO/IEC 42001 Compliant)
+### Universal AI & Security API Gateway (Architected Aligned with ISO/IEC 27001 & ISO/IEC 42001 Principles)
 
 [![Go Tests](https://img.shields.io/badge/Go%20Tests-100%25%20Passing-brightgreen)](#)
 [![Python Guard](https://img.shields.io/badge/Python%20Guard-100%25%20Passing-brightgreen)](#)
-[![ISO 27001](https://img.shields.io/badge/ISO%2FIEC-27001%20Compliant-blue)](#)
-[![ISO 42001](https://img.shields.io/badge/ISO%2FIEC-42001%20AI%20Safety-blue)](#)
+[![ISO 27001 Aligned](https://img.shields.io/badge/ISO%2FIEC-27001%20Aligned-blue)](#)
+[![ISO 42001 Aligned](https://img.shields.io/badge/ISO%2FIEC-42001%20Aligned-blue)](#)
+[![MITRE ATLAS](https://img.shields.io/badge/MITRE-ATLAS%E2%84%A2%20Mapped-orange)](#)
 [![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
+
+> [!NOTE]
+> **ISO Alignment Statement**: NoJect is engineered in strict accordance with the core security principles, architectural controls, and data protection guidelines of **ISO/IEC 27001:2022** (Information Security Management) and **ISO/IEC 42001:2023** (Artificial Intelligence Management System) to empower organizations with ISO-ready technical foundations.
 
 **NoJect** is an open-source, high-performance API Gateway designed to defend modern applications and AI workflows against both **traditional injection attacks** (SQLi, XSS, Command Injection, Path Traversal) and **AI-specific threats** (Prompt Injection, Jailbreaks, System Prompt Extraction, PII Leakage).
 
@@ -56,8 +60,8 @@
 3. **Multi-Vector Threat Protection**:
    - **Traditional**: SQL Injection, Cross-Site Scripting (XSS), OS Command Injection, Path Traversal (`../`).
    - **AI/LLM (OWASP Top 10 for LLM)**: Direct & indirect prompt injection, DAN jailbreak personas, developer mode overrides, sensitive PII leakage.
-4. **ISO Compliance & Tamper-Evident Audit Logging**:
-   - Built to meet **ISO/IEC 27001** (ISMS / Logging A.8.15 / Access Control A.8.2) and **ISO/IEC 42001** (AI Management Systems).
+4. **ISO Architectural Alignment & Tamper-Evident Audit Logging**:
+   - Engineered following the control frameworks of **ISO/IEC 27001** (ISMS / Logging A.8.15 / Access Control A.8.2) and **ISO/IEC 42001** (AI Management Systems).
    - **Cryptographic SHA-256 Hash Chaining**: Verifiable audit trail where any log tampering is immediately detectable.
 5. **Real-time Observability & Monitoring**:
    - **Embedded Web Dashboard**: Real-time SOC dashboard accessible directly at `/dashboard` with zero setup.

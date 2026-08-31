@@ -1,6 +1,11 @@
-# NoJect ISO Compliance Specification & Audit Matrix
+# ISO/IEC 27001 & ISO/IEC 42001 Architectural Alignment Matrix
 
-NoJect is engineered to provide full architectural alignment with international standards for Information Security (**ISO/IEC 27001 / 27002**), Artificial Intelligence Management Systems (**ISO/IEC 42001**), and Application Security (**ISO/IEC 27034**).
+> [!NOTE]
+> **Architectural Alignment Disclaimer**: NoJect is an open-source security gateway engineered in strict alignment with the principles, controls, and risk-management guidelines of **ISO/IEC 27001:2022** and **ISO/IEC 42001:2023**. While NoJect provides the necessary technical controls (such as cryptographic hash-chained audit logging, multi-auth, PII masking, and adversarial injection defense), organizational ISO certification requires an accredited third-party audit of the operating organization's overall ISMS/AIMS processes. NoJect serves as the high-assurance technical foundation for that certification.
+
+---
+
+## 🏛️ Executive Architectural Alignment Overview
 
 ---
 

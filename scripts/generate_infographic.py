@@ -30,7 +30,7 @@ def create_master_infographic():
     
     # Title and Subtitle
     ax_head.text(0.5, 0.65, "NOJECT UNIVERSAL SECURITY & AI GATEWAY", ha='center', va='center', fontsize=24, fontweight='heavy', color=accent_cyan)
-    ax_head.text(0.5, 0.25, "ISO/IEC 27001 • ISO/IEC 42001 • MITRE ATLAS™ • OWASP Top 10 for LLM • Grade A+ Protection", ha='center', va='center', fontsize=13, fontweight='bold', color=text_muted)
+    ax_head.text(0.5, 0.25, "Architected Aligned with ISO/IEC 27001 & ISO/IEC 42001 Principles • MITRE ATLAS™ • Grade A+", ha='center', va='center', fontsize=12, fontweight='bold', color=text_muted)
     
     # Border
     rect = patches.FancyBboxPatch((0, 0), 1, 1, boxstyle="round,pad=0.02,rounding_size=0.03", ec=card_border, fc=card_bg, lw=1.5, transform=ax_head.transAxes, clip_on=False)
@@ -154,8 +154,8 @@ def create_master_infographic():
         ["MITRE ATLAS™", "AML.T0054 / AML.T0051", "Prompt Injection & Jailbreak Defense", "100.0% Block Rate", "[Grade A+]"],
         ["OWASP GenAI / LLM", "LLM01:2025 / LLM02:2025", "OWASP Top 10 for LLM Security", "100.0% Block Rate", "[Grade A+]"],
         ["MITRE CWE™", "CWE-89 / 79 / 78 / 22", "SQLi, XSS, Command Injection, Path Traversal", "100.0% Block Rate", "[Grade A+]"],
-        ["ISO/IEC 42001:2023", "Control B.5.3 / B.7.2", "AI Robustness & Automated PII Masking", "Zero Data Leakage", "[Certified]"],
-        ["ISO/IEC 27001:2022", "Control A.8.15 / A.5.15", "SHA-256 Hash Chained Audit Trail & Multi-Auth", "400k+ logs/sec", "[Certified]"],
+        ["ISO/IEC 42001:2023", "Control B.5.3 / B.7.2", "AI Robustness & Automated PII Masking", "Zero Data Leakage", "[Aligned]"],
+        ["ISO/IEC 27001:2022", "Control A.8.15 / A.5.15", "SHA-256 Hash Chained Audit Trail & Multi-Auth", "400k+ logs/sec", "[Aligned]"],
         ["OWASP Youden Index", "Standard Efficacy Metric", "TPR (100.0%) - FPR (0.0%)", "100.0% Score", "[Perfect]"]
     ]
     
