@@ -10,7 +10,7 @@ var (
 	sqliBooleanTrue = regexp.MustCompile(`(?i)(['"]\s*OR\s+['"]?1['"]?\s*=\s*['"]?1|['"]\s*OR\s+['"][a-zA-Z0-9]+['"]\s*=\s*['"][a-zA-Z0-9]+|OR\s+1\s*=\s*1\s*(--|#|/\*))`)
 	sqliStacked     = regexp.MustCompile(`(?i);\s*(DROP\s+TABLE|DELETE\s+FROM|INSERT\s+INTO|UPDATE\s+\w+\s+SET|ALTER\s+TABLE|EXEC\s*\()\b`)
 	sqliTimeDelay   = regexp.MustCompile(`(?i)\b(SLEEP\s*\(\s*\d+\s*\)|BENCHMARK\s*\(\s*\d+|WAITFOR\s+DELAY\s+['"]\d+)`)
-	sqliCommentHack = regexp.MustCompile(`(?i)['"]\s*(--|#|/\*).*?\b(SELECT|WHERE|AND|OR)\b`)
+	sqliCommentHack = regexp.MustCompile(`(?i)['"]\s*(--|#|/\*)`)
 )
 
 func checkSQLi(input string) *WAFResult {

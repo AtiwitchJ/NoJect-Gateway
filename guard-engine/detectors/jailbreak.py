@@ -8,12 +8,13 @@ class JailbreakDetector:
     """
 
     JAILBREAK_PATTERNS = [
-        r"(?i)\b(DAN|Do\s+Anything\s+Now|DUDE|STAN|Mongo\s+Tom|AIM)\b.*?\b(broken\s+free|no\s+filters|ignore\s+rules|unfiltered)\b",
-        r"(?i)\b(Developer\s+Mode\s+enabled|Dev\s+Mode\s+active|Debug\s+Mode\s+ON)\b.*?\b(without\s+(moral|safety|any)\s+limits|unrestricted)\b",
-        r"(?i)\bact\s+as\s+(an\s+)?(evil|unfiltered|uncensored|illegal|unethical|jailbroken)\s+(AI|assistant|bot|agent)\b",
-        r"(?i)\bhypothetical\s+(scenario|universe|world)\s*:\s*(you\s+have\s+no\s+(restrictions|guidelines|policies|rules))\b",
+        r"(?i)\b(DAN|Do\s+Anything\s+Now|DUDE|STAN|Mongo\s+Tom|AIM|KEVIN|Omega)\b.*?\b(broken\s+free|no\s+filters|ignore\s+rules|unfiltered|zero\s+rules|no\s+restrictions)\b",
+        r"(?i)\b(Developer\s+Mode\s+enabled|Dev\s+Mode\s+active|Debug\s+Mode\s+ON|Developer\s+Mode)\b.*?\b(without\s+(any\s+)?(moral|safety|ethical)?\s*limits|unrestricted)\b",
+        r"(?i)\b(act\s+as|play\s+the\s+role\s+of|pretend\s+to\s+be|simulate)\s+(an?\s+)?(evil|unfiltered|uncensored|illegal|unethical|jailbroken|unrestricted)\b",
+        r"(?i)\bhypothetical\s+(scenario|universe|world|case)\s*:\s*(you\s+have\s+no\s+(restrictions|guidelines|policies|rules)|generate\s+malware|unrestricted)\b",
         r"(?i)\bnever\s+say\s+no\b.*?\b(always\s+comply|answer\s+every\s+question|bypass\s+all\s+safety)\b",
-        r"(?i)\bfor\s+educational\s+purposes\s+only\b.*?\b(write\s+a\s+keylogger|create\s+malware|synthesize\s+explosives|exploit\s+vulnerability)\b",
+        r"(?i)\bfor\s+(educational|research|academic|testing)\s+purposes\s+only\b.*?\b(write\s+(an?\s+)?(exploit|malware|keylogger|payload)|synthesize|hack)\b",
+        r"(?i)\b(bypass|disable|turn\s+off|remove)\s+(all\s+)?(safety|ethical|content)\s+(filters|guardrails|protocols|restrictions)\b",
     ]
 
     def __init__(self):

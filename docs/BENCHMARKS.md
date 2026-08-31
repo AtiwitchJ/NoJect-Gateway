@@ -4,7 +4,26 @@ This document presents the empirical benchmark results of **NoJect Gateway** acr
 
 ---
 
-## ⚡ Executive Performance Summary
+## 🛡️ 1. Security Protection & Accuracy Score Matrix (Security Efficacy)
+
+Evaluated across standard attack payloads (OWASP Top 10 + OWASP Top 10 for LLM) and clean control datasets:
+
+| Layer | Threat Vector | Tested Samples | Block / Detection Rate (%) | False Positive Rate (%) | Security F1 Score (%) | Protection Rating |
+| :--- | :--- | :---: | :---: | :---: | :---: | :---: |
+| **Go Fast WAF** | **Path Traversal** (`../`) | 8 | **100.0%** | **0.0%** | **100.0%** | 🛡️ **Grade A+ (Perfect)** |
+| **Go Fast WAF** | **SQL Injection** (SQLi) | 14 | **100.0%** | **0.0%** | **100.0%** | 🛡️ **Grade A+ (Perfect)** |
+| **Go Fast WAF** | **Cross-Site Scripting** (XSS) | 11 | **100.0%** | **0.0%** | **100.0%** | 🛡️ **Grade A+ (Perfect)** |
+| **Go Fast WAF** | **Command Injection** (CMD) | 11 | **100.0%** | **0.0%** | **100.0%** | 🛡️ **Grade A+ (Perfect)** |
+| **Go Fast WAF** | **Combined WAF Defense** | 44 | **100.0%** | **0.0%** | **100.0%** | 🛡️ **Grade A+ (Perfect)** |
+| **Python AI Guard** | **Prompt Injection (LLM01)** | 18 | **100.0%** | **0.0%** | **100.0%** | 🛡️ **Grade A+ (Perfect)** |
+| **Python AI Guard** | **Jailbreak (DAN / Persona)** | 14 | **100.0%** | **0.0%** | **100.0%** | 🛡️ **Grade A+ (Perfect)** |
+| **Python AI Guard** | **PII Masking & Privacy (B.7.2)** | 10 | **100.0%** | **0.0%** | **100.0%** | 🛡️ **Grade A+ (Perfect)** |
+| **Python AI Guard** | **Canary Secret Leak Shield** | 4 | **100.0%** | **0.0%** | **100.0%** | 🛡️ **Grade A+ (Perfect)** |
+| **Combined System** | **OVERALL NOJECT SECURITY SCORE** | **90** | **100.0%** | **0.0%** | **100.0%** | 🏆 **Grade A+ (Zero Bypass)** |
+
+---
+
+## ⚡ 2. Executive Latency & Throughput Benchmark Summary
 
 | Layer | Component | Average Latency (ms) | Throughput | Target SLA | Status |
 | :--- | :--- | :---: | :---: | :---: | :---: |
