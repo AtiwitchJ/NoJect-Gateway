@@ -16,13 +16,16 @@ test-go:
 test-py:
 	cd guard-engine && $(PYTHON) -m pytest tests/ -v
 
-bench: bench-go bench-py
+bench: bench-go bench-py bench-models
 
 bench-go:
 	$(GO) test -bench=. -benchmem -run=^$$ ./internal/waf/... ./internal/audit/...
 
 bench-py:
 	$(PYTHON) guard-engine/benchmark.py
+
+bench-models:
+	$(PYTHON) guard-engine/model_evaluator.py
 
 clean:
 	rm -rf bin/ logs/ *.log
