@@ -124,6 +124,8 @@ Tested on Apple Silicon (Apple M5 / Darwin arm64):
 ---
 
 ## 📚 Documentation
+- 🎨 [Executive Infographic & Presentation Deck (Markdown)](docs/INFOGRAPHIC.md)
+- 🖥️ [Interactive Presentation Slides (HTML)](docs/presentation.html)
 - 📊 [Detailed Benchmark Results (All Injection Vectors)](docs/BENCHMARKS.md)
 - 📖 [Quickstart Guide](docs/QUICKSTART.md)
 - 🔒 [ISO Compliance Matrix (ISO 27001 / ISO 42001)](docs/ISO_COMPLIANCE.md)

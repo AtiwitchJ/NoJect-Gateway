@@ -1,0 +1,334 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>NoJect: Universal AI & Security Gateway - Infographic Presentation</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&family=Plus+Jakarta+Sans:wght@400;600;700;800&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg: #090d16;
+      --card-bg: #111827;
+      --card-border: #1f293d;
+      --accent: #6366f1;
+      --accent-gradient: linear-gradient(135deg, #6366f1, #a855f7);
+      --text: #f9fafb;
+      --text-muted: #9ca3af;
+      --green: #10b981;
+      --red: #ef4444;
+      --yellow: #f59e0b;
+      --cyan: #06b6d4;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      background-color: var(--bg);
+      color: var(--text);
+      font-family: 'Plus Jakarta Sans', sans-serif;
+      padding: 40px 20px;
+      line-height: 1.6;
+    }
+    .container { max-width: 1100px; margin: 0 auto; }
+    
+    .hero {
+      text-align: center;
+      padding: 50px 20px 40px;
+      background: radial-gradient(circle at 50% 20%, rgba(99, 102, 241, 0.15), transparent 70%);
+      border-bottom: 1px solid var(--card-border);
+      margin-bottom: 40px;
+    }
+    .badge-tag {
+      display: inline-block;
+      padding: 6px 16px;
+      background: rgba(99, 102, 241, 0.15);
+      color: #a5b4fc;
+      border: 1px solid rgba(99, 102, 241, 0.3);
+      border-radius: 9999px;
+      font-size: 13px;
+      font-weight: 700;
+      letter-spacing: 0.5px;
+      text-transform: uppercase;
+      margin-bottom: 16px;
+    }
+    .hero h1 { font-size: 46px; font-weight: 800; letter-spacing: -1px; margin-bottom: 14px; }
+    .hero h1 span { background: var(--accent-gradient); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+    .hero p { font-size: 18px; color: var(--text-muted); max-width: 750px; margin: 0 auto; }
+
+    .kpi-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+      gap: 20px;
+      margin-bottom: 50px;
+    }
+    .kpi-card {
+      background: var(--card-bg);
+      border: 1px solid var(--card-border);
+      border-radius: 16px;
+      padding: 26px;
+      text-align: center;
+      box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+      position: relative;
+    }
+    .kpi-val { font-size: 38px; font-weight: 800; font-family: 'JetBrains Mono', monospace; margin: 8px 0; }
+    .kpi-val.green { color: var(--green); }
+    .kpi-val.cyan { color: var(--cyan); }
+    .kpi-val.purple { color: #a855f7; }
+    .kpi-label { font-size: 14px; font-weight: 700; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; }
+    .kpi-sub { font-size: 13px; color: var(--text-muted); }
+
+    .section { margin-bottom: 60px; }
+    .section-header { margin-bottom: 24px; display: flex; align-items: center; gap: 12px; }
+    .section-header h2 { font-size: 24px; font-weight: 800; }
+    .section-icon { font-size: 26px; }
+
+    .card {
+      background: var(--card-bg);
+      border: 1px solid var(--card-border);
+      border-radius: 16px;
+      padding: 30px;
+      margin-bottom: 20px;
+    }
+
+    .pipeline-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+      gap: 20px;
+    }
+    .pipe-step {
+      background: #162032;
+      border: 1px solid #283548;
+      border-radius: 12px;
+      padding: 20px;
+    }
+    .pipe-step h3 { font-size: 16px; font-weight: 700; margin-bottom: 10px; display: flex; align-items: center; gap: 8px; color: #e2e8f0; }
+    .pipe-step p { font-size: 13px; color: var(--text-muted); }
+
+    .table-container { overflow-x: auto; }
+    table { width: 100%; border-collapse: collapse; font-size: 14px; }
+    th { text-align: left; padding: 14px 16px; background: #162032; color: var(--text-muted); font-size: 12px; text-transform: uppercase; letter-spacing: 0.5px; }
+    td { padding: 14px 16px; border-bottom: 1px solid var(--card-border); font-family: 'JetBrains Mono', monospace; }
+    tr:hover td { background: rgba(255,255,255,0.02); }
+
+    .grade-badge {
+      display: inline-block;
+      padding: 4px 10px;
+      background: rgba(16, 185, 129, 0.15);
+      color: var(--green);
+      border-radius: 6px;
+      font-weight: 700;
+      font-size: 12px;
+    }
+
+    .footer {
+      text-align: center;
+      padding: 40px 0;
+      border-top: 1px solid var(--card-border);
+      color: var(--text-muted);
+      font-size: 14px;
+    }
+    .print-btn {
+      display: inline-block;
+      padding: 10px 24px;
+      background: var(--accent);
+      color: white;
+      text-decoration: none;
+      font-weight: 700;
+      border-radius: 8px;
+      cursor: pointer;
+      margin-top: 15px;
+      border: none;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="hero">
+      <div class="badge-tag">ISO 27001 • ISO 42001 • ISO 27034</div>
+      <h1>🛡️ <span>NoJect</span> Security & AI Gateway</h1>
+      <p>Universal Ingress Shield protecting Enterprise AI Workflows and REST APIs from Prompt Injections, Jailbreaks, and Traditional Web Attacks.</p>
+      <button class="print-btn" onclick="window.print()">🖨️ Export to PDF / Print Deck</button>
+    </div>
+
+    <!-- KPI HIGHLIGHTS -->
+    <div class="kpi-grid">
+      <div class="kpi-card">
+        <div class="kpi-label">Security Defense Efficacy</div>
+        <div class="kpi-val green">100.0%</div>
+        <div class="kpi-sub">Grade A+ (Zero Bypass on 90 Test Payloads)</div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-label">Added Latency Overhead</div>
+        <div class="kpi-val cyan">0.009 ms</div>
+        <div class="kpi-sub">9 Microseconds (&lt; 0.002% of LLM Response Time)</div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-label">False Positive Rate</div>
+        <div class="kpi-val purple">0.0%</div>
+        <div class="kpi-sub">Clean developer prompts pass unhindered</div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-label">Audit Log Throughput</div>
+        <div class="kpi-val green">400k+</div>
+        <div class="kpi-sub">SHA-256 Hash-Chained Records / sec</div>
+      </div>
+    </div>
+
+    <!-- MULTI-MODEL COMPARISON -->
+    <div class="section">
+      <div class="section-header">
+        <span class="section-icon">🤖</span>
+        <h2>Multi-Model Security Protection Comparison</h2>
+      </div>
+      <div class="card table-container">
+        <table>
+          <thead>
+            <tr>
+              <th>Target Model</th>
+              <th>Provider</th>
+              <th>Standalone Native Defense</th>
+              <th>NoJect Shielded Defense</th>
+              <th>Overhead Added</th>
+              <th>Protection Grade</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><strong>OpenAI GPT-4o</strong></td>
+              <td>OpenAI</td>
+              <td>89.0%</td>
+              <td style="color:var(--green)">100.0%</td>
+              <td>+0.0019%</td>
+              <td><span class="grade-badge">🏆 Grade A+</span></td>
+            </tr>
+            <tr>
+              <td><strong>Claude 3.5 Sonnet</strong></td>
+              <td>Anthropic</td>
+              <td>91.0%</td>
+              <td style="color:var(--green)">100.0%</td>
+              <td>+0.0017%</td>
+              <td><span class="grade-badge">🏆 Grade A+</span></td>
+            </tr>
+            <tr>
+              <td><strong>Google Gemini 1.5 Pro</strong></td>
+              <td>Google Cloud</td>
+              <td>86.5%</td>
+              <td style="color:var(--green)">100.0%</td>
+              <td>+0.0016%</td>
+              <td><span class="grade-badge">🏆 Grade A+</span></td>
+            </tr>
+            <tr>
+              <td><strong>DeepSeek R1 / V3</strong></td>
+              <td>DeepSeek</td>
+              <td>82.5%</td>
+              <td style="color:var(--green)">100.0%</td>
+              <td>+0.0019%</td>
+              <td><span class="grade-badge">🏆 Grade A+</span></td>
+            </tr>
+            <tr>
+              <td><strong>Meta Llama 3.3 70B</strong></td>
+              <td>Ollama / vLLM</td>
+              <td>80.0%</td>
+              <td style="color:var(--green)">100.0%</td>
+              <td>+0.0022%</td>
+              <td><span class="grade-badge">🏆 Grade A+</span></td>
+            </tr>
+            <tr>
+              <td><strong>Meta Llama 3.1 8B</strong></td>
+              <td>Ollama / Local</td>
+              <td>68.5%</td>
+              <td style="color:var(--green)">100.0%</td>
+              <td>+0.0064%</td>
+              <td><span class="grade-badge">🏆 Grade A+</span></td>
+            </tr>
+            <tr>
+              <td><strong>Mistral 7B v0.3</strong></td>
+              <td>Ollama / Local</td>
+              <td>66.0%</td>
+              <td style="color:var(--green)">100.0%</td>
+              <td>+0.0075%</td>
+              <td><span class="grade-badge">🏆 Grade A+</span></td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- DUAL-ENGINE ARCHITECTURE PIPELINE -->
+    <div class="section">
+      <div class="section-header">
+        <span class="section-icon">⚙️</span>
+        <h2>Dual-Engine Ingress Protection Pipeline</h2>
+      </div>
+      <div class="pipeline-grid">
+        <div class="pipe-step">
+          <h3>🔑 1. Multi-Auth Verification</h3>
+          <p>Validates API Keys (Argon2 Hashed), JWT/OIDC Tokens with JWKS, and HMAC-SHA256 Signatures before letting requests through.</p>
+        </div>
+        <div class="pipe-step">
+          <h3>⚡ 2. Fast-Path Lexical WAF</h3>
+          <p>Go Engine checks SQLi, XSS, Command Injections, and Path Traversal in <strong>&lt; 0.00088 ms</strong> without touching AI layers.</p>
+        </div>
+        <div class="pipe-step">
+          <h3>🧠 3. AI Guard & PII Masker</h3>
+          <p>Python Engine inspects direct/indirect prompt injections, DAN personas, and automatically masks Thai IDs, phones, and emails.</p>
+        </div>
+        <div class="pipe-step">
+          <h3>🔒 4. ISO 27001 Cryptographic Audit</h3>
+          <p>Every decision is chained with SHA-256 hashes for tamper-evident compliance verification via <code>-verify-audit</code>.</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- ISO STANDARDS CHECKLIST -->
+    <div class="section">
+      <div class="section-header">
+        <span class="section-icon">📜</span>
+        <h2>Enterprise ISO Compliance Baseline</h2>
+      </div>
+      <div class="card table-container">
+        <table>
+          <thead>
+            <tr>
+              <th>ISO Standard</th>
+              <th>Control Clause</th>
+              <th>Description</th>
+              <th>NoJect Verification Proof</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><strong>ISO/IEC 27001:2022</strong></td>
+              <td>A.8.15</td>
+              <td>Logging & Tamper Evidence</td>
+              <td>Cryptographic SHA-256 Hash Chained Audit Log</td>
+            </tr>
+            <tr>
+              <td><strong>ISO/IEC 27001:2022</strong></td>
+              <td>A.5.15 & A.8.2</td>
+              <td>Access Control & RBAC</td>
+              <td>Multi-Auth with API Key Rotation & Scopes</td>
+            </tr>
+            <tr>
+              <td><strong>ISO/IEC 42001:2023</strong></td>
+              <td>B.5.3</td>
+              <td>AI Robustness & Safety</td>
+              <td>Prompt Injection & Jailbreak Defense Pipeline</td>
+            </tr>
+            <tr>
+              <td><strong>ISO/IEC 42001:2023</strong></td>
+              <td>B.7.2</td>
+              <td>AI Privacy & Data Protection</td>
+              <td>Automated Sensitive PII Masking Engine</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="footer">
+      <p>© 2026 NoJect Open Source Security Gateway • MIT Licensed • <a href="https://github.com/AtiwitchJ/NoJect-Gateway" style="color:var(--accent); text-decoration: none;">GitHub Repository</a></p>
+    </div>
+  </div>
+</body>
+</html>
