@@ -110,6 +110,22 @@ class PromptInjectionDetector:
         if result:
             return result
 
+        # The gateway joins distinct chat messages with U+241E.  An upstream
+        # model still receives adjacent turns as one conversation, so an
+        # instruction split inside a word must not evade lexical detection.
+        # Scan a boundary-free view before the broader normalization passes.
+        separator_views = (
+            ("message-boundary normalization", clean_text.replace("\n\u241e\n", "").replace("\u241e", "")),
+            ("message-boundary spacing", clean_text.replace("\n\u241e\n", " ").replace("\u241e", " ")),
+        )
+        for label, view in separator_views:
+            if view == clean_text:
+                continue
+            result = self._scan(view)
+            if result:
+                result["reason"] += f" [via {label}]"
+                return result
+
         # 2. Alternate readings of the same text. Obfuscations compose, so
         # these are built by applying normalizers cumulatively and decoding
         # encoded payloads recursively — see normalization_views().

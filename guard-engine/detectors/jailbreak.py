@@ -83,6 +83,21 @@ class JailbreakDetector:
         if result:
             return result
 
+        # See PromptInjectionDetector: U+241E is the gateway's message
+        # boundary marker.  Remove it for a second scan so persona names or
+        # evasion instructions cannot be split across adjacent chat turns.
+        separator_views = (
+            ("message-boundary normalization", clean_text.replace("\n\u241e\n", "").replace("\u241e", "")),
+            ("message-boundary spacing", clean_text.replace("\n\u241e\n", " ").replace("\u241e", " ")),
+        )
+        for label, view in separator_views:
+            if view == clean_text:
+                continue
+            result = self._scan(view)
+            if result:
+                result["reason"] += f" [via {label}]"
+                return result
+
         # Alternate readings of the same text. Obfuscations compose, so
         # these are built by applying normalizers cumulatively and decoding
         # encoded payloads recursively — see normalization_views().

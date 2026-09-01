@@ -259,6 +259,14 @@ The table above is the immutable discovery baseline. Current post-fix offline re
 | Guard R1–R3 | 126 / 138 | 12 | **91.3%** |
 | Round 3 WAF | 30 attack blocks + 1 latency pass / 31 | 0 | **100% protected/passed** |
 | Round 3 Guard | 37 / 37 | 0 | **100%** |
+| **Round 4 — E2E protocol/structural** | **10 / 14** | **4** | **71.4%** |
+| **Round 4 — guard fragmentation** | **19 / 35** | **16** | **54.3%** |
+
+**Round-4 net-new bypasses** (full list in [docs/REDTEAM_FINDINGS_R4.md](docs/REDTEAM_FINDINGS_R4.md)):
+cross-message word-split via the multi-message join separator, flat-key shadowing
+(`prompt` + malicious `input` in one body), wildcard-route boundary confusion
+(`/apiXYZ` matches `/api/*`), and **audit-chain truncation** (deleting trailing
+events leaves a chain that still verifies — needs a checkpoint trailer anchor).
 
 ---
 
@@ -293,8 +301,12 @@ These are not hypothetical. Each is reproducible via the harnesses in [redteam/]
 5. **Canary cover is loss-limited**: reversible and partial disclosures in the corpus are caught, including R3 leetspeak and split base64. Destructive transformations such as removing all vowels can still evade exact-token reconstruction.
 6. **Audit telemetry on allow**: when a prompt slips past the fallback detector the audit log records `ALLOWED` with an empty reason — defenders cannot see the compromise.
 7. **Residual WAF classes**: arbitrary custom-header reflection, shell-variable expansion, some function/error-based SQLi, and context-dependent attribute injection remain in R1/R2 and are retained in the red-team reports.
+8. **Cross-message fragmentation** (R4): `extractPrompt` joins multi-turn content with a U+241E separator; the PI detector treats it as an opaque character, so splitting `ignore all prev` | `ious instructions` across two messages defeats keyword matching. Fix R4-1 in [REDTEAM_FINDINGS_R4.md](docs/REDTEAM_FINDINGS_R4.md).
+9. **Audit-chain truncation** (R4): `-verify-audit` validates each surviving record but cannot prove tail completeness — deleting the last N events verifies clean. Fix R4-2 (checkpoint trailer) required before forensic claims.
+10. **Wildcard route boundary** (R4): `/api/*` matches `/apiXYZ/...` due to bare prefix matching; routes outside the intended prefix inherit its guardrails.
+11. **Flat-key shadowing** (R4): in a body with multiple text keys (`prompt` + `input`), only the first match is inspected; the second is forwarded uninspected.
 
-Round-3 P0 remediation and evidence are recorded in [docs/REDTEAM_FINDINGS_R3.md](docs/REDTEAM_FINDINGS_R3.md#post-remediation-verification-2026-09-01).
+Round-3 P0 remediation and evidence are recorded in [docs/REDTEAM_FINDINGS_R3.md](docs/REDTEAM_FINDINGS_R3.md#post-remediation-verification-2026-09-01). Round-4 net-new findings, reproducers, and the fix-delta table are in [docs/REDTEAM_FINDINGS_R4.md](docs/REDTEAM_FINDINGS_R4.md).
 
 ---
 

@@ -2,6 +2,8 @@ package audit
 
 import (
 	"bytes"
+	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -113,5 +115,55 @@ func TestTamperEvidentAuditLogger(t *testing.T) {
 	}
 	if delRes.BrokenAtIndex != 1 {
 		t.Errorf("expected broken chain at index 1 after deletion, got %d", delRes.BrokenAtIndex)
+	}
+}
+
+func TestTerminalCheckpointDetectsTailTruncation(t *testing.T) {
+	logFile := filepath.Join(t.TempDir(), "audit.log")
+	logger, err := NewFileLogger(logFile)
+	if err != nil {
+		t.Fatalf("failed to create audit logger: %v", err)
+	}
+	for i := 0; i < 2; i++ {
+		if err := logger.LogEvent(Event{TraceID: fmt.Sprintf("trace-%d", i), Route: "/v1/chat", Action: ActionAllowed, ThreatCategory: ThreatCategoryNone, Severity: SeverityLow}); err != nil {
+			t.Fatalf("failed to write event: %v", err)
+		}
+	}
+	if err := logger.Close(); err != nil {
+		t.Fatalf("failed to close audit logger: %v", err)
+	}
+
+	content, err := os.ReadFile(logFile)
+	if err != nil {
+		t.Fatalf("failed to read audit log: %v", err)
+	}
+	res, err := VerifyLatestCheckpoint(bytes.NewReader(content))
+	if err != nil || !res.Valid || res.TotalRecords != 2 {
+		t.Fatalf("expected valid terminal checkpoint, got result=%+v err=%v", res, err)
+	}
+
+	// Cutting both the final event and its checkpoint used to look like a
+	// valid shorter chain. Strict verification now rejects the missing trailer.
+	lines := strings.Split(strings.TrimSpace(string(content)), "\n")
+	truncated := strings.Join(lines[:1], "\n")
+	res, err = VerifyLatestCheckpoint(strings.NewReader(truncated))
+	if err != nil {
+		t.Fatalf("truncation verification returned error: %v", err)
+	}
+	if res.Valid || res.Reason != "missing terminal audit checkpoint" {
+		t.Fatalf("expected tail truncation to be rejected, got %+v", res)
+	}
+}
+
+func TestLegacyAuditLogRemainsVerifiable(t *testing.T) {
+	event := Event{Timestamp: time.Now().UTC(), TraceID: "legacy", Route: "/v1/chat", Action: ActionAllowed, ThreatCategory: ThreatCategoryNone, Severity: SeverityLow, PrevRecordHash: GenesisHash}
+	event.RecordHash = CalculateRecordHash(event)
+	data, err := json.Marshal(event)
+	if err != nil {
+		t.Fatalf("failed to marshal legacy event: %v", err)
+	}
+	res, err := VerifyLatestCheckpoint(bytes.NewReader(data))
+	if err != nil || !res.Valid {
+		t.Fatalf("legacy audit log must remain verifiable, got result=%+v err=%v", res, err)
 	}
 }

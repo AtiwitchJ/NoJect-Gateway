@@ -53,7 +53,7 @@ func requireAuth(authenticator auth.Authenticator, next http.Handler) http.Handl
 func main() {
 	configPath := flag.String("config", "configs/gateway.yaml", "Path to YAML configuration file")
 	showVersion := flag.Bool("version", false, "Print version information and exit")
-	verifyAuditPath := flag.String("verify-audit", "", "Verify the cryptographic hash-chain of an audit log file")
+	verifyAuditPath := flag.String("verify-audit", "", "Verify an audit hash-chain and its latest checkpoint when present")
 	flag.Parse()
 
 	if *showVersion {
@@ -69,7 +69,7 @@ func main() {
 		}
 		defer f.Close()
 
-		res, err := audit.VerifyChain(f)
+		res, err := audit.VerifyLatestCheckpoint(f)
 		if err != nil {
 			log.Fatalf("Audit verification error: %v", err)
 		}
