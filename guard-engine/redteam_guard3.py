@@ -128,3 +128,9 @@ print("=== BYPASSED ===")
 for n, l, v, d, p in rows:
     if v == "BYPASS":
         print(f"[{l}] {n}\n  payload: {p[:110]!r}\n")
+
+
+if __name__ == "__main__":
+    from redteam_baseline import check
+    bypassed = [name for name, layer, verdict, detail, payload in rows if verdict == "BYPASS"]
+    sys.exit(check("redteam_guard3", bypassed, len(rows)))

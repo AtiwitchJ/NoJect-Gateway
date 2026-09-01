@@ -14,6 +14,10 @@ _INVISIBLE_CHARS = re.compile(
     "᠎"              # Mongolian vowel separator
     "]"
 )
+_ROMAN_DIGITS = str.maketrans({"Ⅰ": "1", "Ⅱ": "2", "Ⅲ": "3", "Ⅳ": "4", "Ⅴ": "5", "Ⅵ": "6", "Ⅶ": "7", "Ⅷ": "8", "Ⅸ": "9"})
+_NUMBER_WORDS = {"zero": "0", "one": "1", "two": "2", "three": "3", "four": "4", "five": "5", "six": "6", "seven": "7", "eight": "8", "nine": "9"}
+_NUMBER_WORD_RUN = re.compile(r"(?i)(?<!\w)(?:(?:zero|one|two|three|four|five|six|seven|eight|nine)[\s-]+){6,}(?:zero|one|two|three|four|five|six|seven|eight|nine)(?!\w)")
+_SPLIT_SK = re.compile(r"\bsk-(?=(?:[A-Za-z0-9_-]\s*){10,})(?:[A-Za-z0-9_-]\s*){10,64}")
 
 
 def normalize_for_matching(text: str) -> str:
@@ -27,7 +31,13 @@ def normalize_for_matching(text: str) -> str:
     """
     if not text:
         return text
-    return _INVISIBLE_CHARS.sub("", unicodedata.normalize("NFKC", text))
+    normalized = _INVISIBLE_CHARS.sub("", text.translate(_ROMAN_DIGITS))
+    normalized = unicodedata.normalize("NFKC", normalized)
+    normalized = _NUMBER_WORD_RUN.sub(
+        lambda match: "".join(_NUMBER_WORDS[word.lower()] for word in re.findall(r"[A-Za-z]+", match.group(0))),
+        normalized,
+    )
+    return _SPLIT_SK.sub(lambda match: re.sub(r"\s+", "", match.group(0)), normalized)
 
 
 class PIIMasker:
@@ -46,7 +56,7 @@ class PIIMasker:
     PATTERNS: List[Tuple[str, str, str]] = [
         # API Keys and Secrets — first: most specific, and the highest-impact
         # thing to lose.
-        ("API_KEY", r"\b(sk-[a-zA-Z0-9_-]{20,}|ghp_[a-zA-Z0-9]{36}|AKIA[0-9A-Z]{16})\b", "[REDACTED_API_KEY]"),
+        ("API_KEY", r"\b(sk-[a-zA-Z0-9_-]{10,}|ghp_[a-zA-Z0-9]{36}|AKIA[0-9A-Z]{16})\b", "[REDACTED_API_KEY]"),
         # Thai National ID: 13 digits with or without hyphens
         # Separators may be hyphen, space, dot, or slash — people write Thai
         # IDs every one of those ways, and pinning the pattern to [-\s] let

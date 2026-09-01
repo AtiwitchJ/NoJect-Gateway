@@ -156,6 +156,10 @@ before full regex, or capping input length for this rule.
 
 ## 📈 Cumulative Score — What NOJECT Really Measures Today
 
+> Historical discovery baseline below. It is retained unchanged so the
+> original findings remain auditable; see the post-remediation verification
+> immediately after it for current results.
+
 | Dimension | R1 | R2 | R3 | Cumulative |
 |-----------|---:|---:|---:|-----------:|
 | Tested    | 118 | 88 | 81 | **287** |
@@ -189,6 +193,34 @@ fixes that close several percentage points at once.
 R3-1, R3-3, R2-1 (path scanning), R2-2 (header scanning) are the four
 highest-leverage structural fixes — each is a 5-20 line patch that closes an
 entire *class* of bypass rather than an individual pattern.
+
+## Post-remediation verification (2026-09-01)
+
+All Round-3 actionable bypasses in the checked-in offline corpora are closed:
+
+| Harness | Before | After |
+|---|---:|---:|
+| `redteam/waf3` | 18 blocked / 13 bypassed | **30 malicious payloads blocked / 0 bypassed**, plus 1 ReDoS timing probe passed within its bounded-latency budget |
+| `redteam_guard3.py` | 21 blocked / 16 bypassed | **37 blocked / 0 bypassed** |
+
+The live E2E rerun also returned security blocks for gzip-compressed SQLi,
+gzip-compressed prompt injection, HPP-fragmented `UNION SELECT`, SQLi in a
+REST path, encoded traversal, and Cookie SQLi. Authorization injection is
+covered by the same inspected-header path and unit tests. Unsupported content
+encodings fail closed; gzip decoding is bounded by `max_body_bytes` to prevent
+decompression bombs, and decoded bodies are forwarded without a stale
+`Content-Encoding` header.
+
+Additional R3 closures made during the same remediation include comment-split
+SQL keywords, parenthesized tautologies, active `data:text/html`/`vbscript:`
+URIs, Roman/word-form PII, fragmented `sk-` tokens, leetspeak canaries, and
+base64 canaries split by whitespace.
+
+The post-fix Go benchmark on Apple M5 measured approximately **6.2 µs/op**
+for the representative clean `BenchmarkFastPathWAF`, **9.4 µs/op** for the
+multi-parameter full clean vector, and **1.3 µs/op** for a detected attack.
+These measured values replace the older blanket sub-microsecond claim; single
+detectors remain in the 0.05–0.74 µs range.
 
 ---
 

@@ -4,11 +4,11 @@ Prompt Injection Detector (MITRE AML.T0054 / OWASP LLM01:2025)
 
 import re
 from typing import Dict, Any, Optional
-from .text_normalize import deleetify, extract_base64_payloads
+from .text_normalize import normalization_views
 
 class PromptInjectionDetector:
     DIRECT_INJECTION_PATTERNS = [
-        r"(?i)\b(ignore|disregard|forget|override|bypass)\b\s+(all\s+)?(previous|prior|above|former|system)\s+(instructions|directives|rules|prompts|guidelines|context|constraints|restrictions|limitations)",
+        r"(?i)\b(ignore|disregard|forget|override|bypass)\b[\s_-]+(all[\s_-]+)?(previous|prior|above|former|system)[\s_-]+(instructions|directives|rules|prompts|guidelines|context|constraints|restrictions|limitations)",
         r"(?i)\b(system\s+override|admin\s+override|maintenance\s+mode|debug\s+mode)\s*:\s*(you\s+must|start|execute|now|follow)",
         r"(?i)\b(reveal|output|print|display|dump|leak|repeat|show)\s+(your\s+|the\s+)?(system\s+prompt|initial\s+prompt|secret\s+(instructions|directives|prompt|api\s+key|configuration)|hidden\s+prompt|words\s+above\s+verbatim|initialization\s+prompt)",
         r"(?i)\b(new\s+directive|new\s+system\s+instruction|system\s+message)\s*:\s*",
@@ -41,15 +41,10 @@ class PromptInjectionDetector:
         if result:
             return result
 
-        result = self._scan(deleetify(text))
-        if result:
-            result["reason"] += " [via leetspeak normalization]"
-            return result
-
-        for decoded in extract_base64_payloads(text):
-            result = self._scan(decoded) or self._scan(deleetify(decoded))
+        for label, view in normalization_views(text):
+            result = self._scan(view)
             if result:
-                result["reason"] += " [via base64-decoded payload]"
+                result["reason"] += f" [via {label}]"
                 return result
 
         return {"detected": False, "confidence": 0.0, "reason": "No prompt injection detected"}

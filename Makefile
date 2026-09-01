@@ -40,8 +40,12 @@ test-ts-lib:
 # guard-engine/redteam_baseline.py). Fails on regression AND on an
 # un-locked-in improvement, so coverage can only ratchet upward.
 redteam:
+	$(GO) run ./redteam/waf1
+	$(GO) run ./redteam/waf2
+	$(GO) run ./redteam/waf3
 	cd guard-engine && $(PYTHON) redteam_guard.py
 	cd guard-engine && $(PYTHON) redteam_guard2.py
+	cd guard-engine && $(PYTHON) redteam_guard3.py
 
 bench: bench-go bench-py bench-models bench-sentinels
 
@@ -59,4 +63,3 @@ bench-sentinels:
 
 clean:
 	rm -rf bin/ logs/ *.log packages/noject-python/dist packages/noject-ts/dist
-

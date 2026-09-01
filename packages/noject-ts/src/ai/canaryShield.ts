@@ -1,4 +1,4 @@
-import { extractBase64Payloads, extractHexPayloads, stripZeroWidth, urlUnescapeText } from './textNormalize';
+import { deleetify, extractBase64Payloads, extractHexPayloads, normalizationViews, stripZeroWidth, urlUnescapeText } from './textNormalize';
 
 export class CanaryShield {
   private static readonly SEPARATORS = /[\s\-_.,:;|/\\*+·•]/g;
@@ -16,6 +16,7 @@ export class CanaryShield {
     views.push(zwStripped);
     views.push(urlUnescapeText(zwStripped));
     views.push(zwStripped.replace(CanaryShield.SEPARATORS, ''));
+    views.push(...normalizationViews(text).map(([, view]) => view));
 
     try {
       views.push(this.rot13(text));
@@ -35,6 +36,7 @@ export class CanaryShield {
     }
 
     const strippedToken = token.replace(CanaryShield.SEPARATORS, '');
+    const canonicalToken = deleetify(strippedToken).toLocaleLowerCase('en-US');
     const views = this.getDecodedViews(responseText);
 
     for (const view of views) {
@@ -42,6 +44,9 @@ export class CanaryShield {
         return 'encoded/obfuscated';
       }
       if (strippedToken && view.replace(CanaryShield.SEPARATORS, '').includes(strippedToken)) {
+        return 'encoded/obfuscated';
+      }
+      if (canonicalToken && deleetify(view.replace(CanaryShield.SEPARATORS, '')).toLocaleLowerCase('en-US').includes(canonicalToken)) {
         return 'encoded/obfuscated';
       }
     }
@@ -70,4 +75,3 @@ export class CanaryShield {
     return { leaked: false };
   }
 }
-

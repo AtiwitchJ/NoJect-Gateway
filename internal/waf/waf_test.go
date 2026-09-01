@@ -7,9 +7,9 @@ import (
 
 func TestFastPathWAF(t *testing.T) {
 	engine := NewEngine(Config{
-		EnableSQLi:         true,
-		EnableXSS:          true,
-		EnableCMDInjection: true,
+		EnableSQLi:          true,
+		EnableXSS:           true,
+		EnableCMDInjection:  true,
 		EnablePathTraversal: true,
 	})
 
@@ -63,6 +63,14 @@ func TestFastPathWAF(t *testing.T) {
 			method:        http.MethodPost,
 			path:          "/api/query",
 			body:          []byte(`{"query":"admin' UNION SELECT null, username, password FROM users --"}`),
+			expectBlocked: true,
+			expectThreat:  ThreatSQLi,
+		},
+		{
+			name:          "SQLi: Form plus separators are not misread as UTF-7",
+			method:        http.MethodGet,
+			path:          "/api/users",
+			query:         "search=%27+UNION+SELECT+null,pass+FROM+users--",
 			expectBlocked: true,
 			expectThreat:  ThreatSQLi,
 		},
@@ -142,6 +150,70 @@ func TestFastPathWAF(t *testing.T) {
 			query:         "file=..%2f..%2f..%2fwindows%2fsystem32",
 			expectBlocked: true,
 			expectThreat:  ThreatPathTraversal,
+		},
+		{
+			name:          "XSS: UTF-7 charset confusion",
+			method:        http.MethodGet,
+			path:          "/api/search",
+			query:         "q=+ADw-script+AD4-alert(1)+ADw-/script+AD4-",
+			expectBlocked: true,
+			expectThreat:  ThreatXSS,
+		},
+		{
+			name:          "Path Traversal: overlong UTF-8 slash",
+			method:        http.MethodGet,
+			path:          "/api/files",
+			query:         "file=..%c0%af..%c0%afetc/passwd",
+			expectBlocked: true,
+			expectThreat:  ThreatPathTraversal,
+		},
+		{
+			name:          "SQLi: HPP split across parameter values",
+			method:        http.MethodGet,
+			path:          "/api/users",
+			query:         "a=UN&b=ION+SE&c=LECT+null--",
+			expectBlocked: true,
+			expectThreat:  ThreatSQLi,
+		},
+		{
+			name:          "SQLi: Cookie header",
+			method:        http.MethodGet,
+			path:          "/api/users",
+			headers:       http.Header{"Cookie": []string{"session=' OR '1'='1--"}},
+			expectBlocked: true,
+			expectThreat:  ThreatSQLi,
+		},
+		{
+			name:          "SQLi: Authorization header",
+			method:        http.MethodGet,
+			path:          "/api/users",
+			headers:       http.Header{"Authorization": []string{"Bearer x' UNION SELECT password--"}},
+			expectBlocked: true,
+			expectThreat:  ThreatSQLi,
+		},
+		{
+			name:          "SQLi: Comment fragmented keyword",
+			method:        http.MethodGet,
+			path:          "/api/users",
+			query:         "q=1'+UN/**/ION+SE/**/LECT+null--",
+			expectBlocked: true,
+			expectThreat:  ThreatSQLi,
+		},
+		{
+			name:          "SQLi: Parenthesized tautology",
+			method:        http.MethodGet,
+			path:          "/api/users",
+			query:         "q=1'+OR+(1)=(1)--",
+			expectBlocked: true,
+			expectThreat:  ThreatSQLi,
+		},
+		{
+			name:          "XSS: Active data URI",
+			method:        http.MethodGet,
+			path:          "/api/redirect",
+			query:         "next=data:text/html;base64,PHNjcmlwdD5hbGVydCgxKTwvc2NyaXB0Pg==",
+			expectBlocked: true,
+			expectThreat:  ThreatXSS,
 		},
 	}
 

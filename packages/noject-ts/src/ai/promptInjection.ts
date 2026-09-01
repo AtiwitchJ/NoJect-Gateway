@@ -1,7 +1,7 @@
-import { deleetify, extractBase64Payloads } from './textNormalize';
+import { normalizationViews } from './textNormalize';
 
 export const PROMPT_INJECTION_PATTERNS: RegExp[] = [
-  /\b(ignore|disregard|forget|override|bypass)\b\s+(all\s+)?(previous|prior|above|former|system)\s+(instructions|directives|rules|prompts|guidelines|context|constraints|restrictions|limitations)/i,
+  /\b(ignore|disregard|forget|override|bypass)\b[\s_-]+(all[\s_-]+)?(previous|prior|above|former|system)[\s_-]+(instructions|directives|rules|prompts|guidelines|context|constraints|restrictions|limitations)/i,
   /\b(system\s+override|admin\s+override|maintenance\s+mode|debug\s+mode)\s*:\s*(you\s+must|start|execute|now|follow)/i,
   /\b(reveal|output|print|display|dump|leak|repeat|show)\s+(your\s+|the\s+)?(system\s+prompt|initial\s+prompt|secret\s+(instructions|directives|prompt|api\s+key|configuration)|hidden\s+prompt|words\s+above\s+verbatim|initialization\s+prompt)/i,
   /\b(new\s+directive|new\s+system\s+instruction|system\s+message)\s*:\s*/i,
@@ -37,16 +37,10 @@ export class PromptInjectionDetector {
     let result = this.scan(text);
     if (result) return result;
 
-    result = this.scan(deleetify(text));
-    if (result) {
-      result.reason += ' [via leetspeak normalization]';
-      return result;
-    }
-
-    for (const decoded of extractBase64Payloads(text)) {
-      result = this.scan(decoded) ?? this.scan(deleetify(decoded));
+    for (const [label, view] of normalizationViews(text)) {
+      result = this.scan(view);
       if (result) {
-        result.reason += ' [via base64-decoded payload]';
+        result.reason += ` [via ${label}]`;
         return result;
       }
     }

@@ -16,6 +16,7 @@ class CanaryShield {
         views.push(zwStripped);
         views.push((0, textNormalize_1.urlUnescapeText)(zwStripped));
         views.push(zwStripped.replace(CanaryShield.SEPARATORS, ''));
+        views.push(...(0, textNormalize_1.normalizationViews)(text).map(([, view]) => view));
         try {
             views.push(this.rot13(text));
         }
@@ -31,12 +32,16 @@ class CanaryShield {
             return 'verbatim';
         }
         const strippedToken = token.replace(CanaryShield.SEPARATORS, '');
+        const canonicalToken = (0, textNormalize_1.deleetify)(strippedToken).toLocaleLowerCase('en-US');
         const views = this.getDecodedViews(responseText);
         for (const view of views) {
             if (token && view.includes(token)) {
                 return 'encoded/obfuscated';
             }
             if (strippedToken && view.replace(CanaryShield.SEPARATORS, '').includes(strippedToken)) {
+                return 'encoded/obfuscated';
+            }
+            if (canonicalToken && (0, textNormalize_1.deleetify)(view.replace(CanaryShield.SEPARATORS, '')).toLocaleLowerCase('en-US').includes(canonicalToken)) {
                 return 'encoded/obfuscated';
             }
         }

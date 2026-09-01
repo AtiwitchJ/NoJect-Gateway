@@ -32,12 +32,12 @@ NoJect combines a **sub-millisecond deterministic Fast WAF (Go)** with an **auto
 
 | Feature Area | Without NoJect (Native App / LLM) | With NoJect Shield |
 | :--- | :--- | :--- |
-| **Prompt Injections & Jailbreaks** | 66.0% – 91.0% defense (easily bypassed via DAN/Roleplay) | ~45-55% real-world defense; non-English / Unicode-homoglyph / chained-encoding attacks bypass the regex layer when `agentic_sentinel` is disabled |
-| **Web Injections (SQLi, XSS, CMD)** | Vulnerable unless handwritten in every microservice | ~50-65% real-world defense on ASCII attacks in query/body; **path, Cookie/Authorization headers, and gzip-compressed bodies are currently unscanned** |
-| **Data Privacy & PII Leakage** | Plaintext Thai IDs, phone numbers, and keys sent to LLMs | Automated masking for ASCII-formatted values (Thai ID, credit card 16-digit, email, phone with separators, common API key patterns) |
-| **Outbound Secret Leaks** | System prompts leaked verbatim in LLM answers | Canary shield catches verbatim/base64/hex/rot13/separator-stripped leaks; reversed, vowel-dropped, and HTML-entity forms bypass |
+| **Prompt Injections & Jailbreaks** | 66.0% – 91.0% defense (easily bypassed via DAN/Roleplay) | **91.3% on the current 138-case Guard red-team corpus**; a configured live Agentic Sentinel is still required for unseen semantic paraphrases |
+| **Web Injections (SQLi, XSS, CMD)** | Vulnerable unless handwritten in every microservice | **86.4% on 110 malicious WAF red-team payloads**; path, Cookie/Authorization, HPP, UTF-7/overlong UTF-8, and gzip bodies are now inspected |
+| **Data Privacy & PII Leakage** | Plaintext Thai IDs, phone numbers, and keys sent to LLMs | Masks Unicode/Roman/word-form digits, 13–19 digit cards, common phone/ID formats, and fragmented API keys in the current corpus |
+| **Outbound Secret Leaks** | System prompts leaked verbatim in LLM answers | Canary shield catches verbatim, encoded, split-base64, HTML-entity, leetspeak, reversed, partial, and separator-obfuscated leaks; lossy transformations such as vowel deletion remain heuristic |
 | **Audit Logs & Compliance** | Plain text logs vulnerable to unauthorized deletion/tampering | Cryptographic SHA-256 Hash Chaining (ISO 27001 A.8.15) — tamper-evidence verified by `-verify-audit` |
-| **Added Latency Overhead** | Varies / Slow | **0.009 ms (9 µs)** nominal; up to ~1 ms on adversarially-constructed inputs that stress a bounded regex (measured) |
+| **Added Latency Overhead** | Varies / Slow | Current Go benchmark: **6.2 µs** representative clean WAF, **9.4 µs** multi-parameter full-vector clean WAF, and **1.3 µs** detected attack on Apple M5; Guard/LLM latency is additional |
 
 ---
 
@@ -49,9 +49,9 @@ NoJect combines a **sub-millisecond deterministic Fast WAF (Go)** with an **auto
                      ▼ (HTTPS / TLS 1.3)
 ┌─────────────────────────────────────────────────────────────┐
 │ 🚀 Tier 1: Deterministic Fast-Path WAF (Go L7 Ingress Core)  │
-│   • Sub-millisecond Lexical Regex Filtering (< 0.001 ms)    │
+│   • Single detectors: 0.05–0.74 µs; full clean WAF: 6–10 µs│
 │   • SQL Injection (CWE-89), XSS (CWE-79), Command (CWE-78)  │
-│   • Path Traversal (CWE-22) & Multi-Auth (Argon2 / JWT)     │
+│   • Path Traversal & Multi-Auth (SHA-256 keys/JWT/HMAC)     │
 └──────────────┬──────────────────────────────┬───────────────┘
                │ (LLM Route)                  │ (Clean REST Request)
                ▼                              │
@@ -204,8 +204,15 @@ make build
 > against its own 90-payload default test corpus ([tests/security_score_test.go](tests/security_score_test.go)).
 > Those numbers are real — *on that corpus* — but they overstate real-world
 > coverage because the corpus only contains unobfuscated ASCII attacks.
-> Three successive red-team rounds against the live gateway measured an
-> **actual detection rate of ~51% (147 of 287 advanced payloads blocked)**.
+> Before the remediation in this release, three successive red-team rounds
+> measured **~51.2% (147 of 287 probes blocked; 137 bypassed; 3 informational)**.
+> After remediation, the rerun scores are **95/110 malicious WAF payloads
+> blocked (86.4%)** and **126/138 Guard payloads blocked (91.3%)**. Round 3 is
+> now **30/30 malicious WAF payloads blocked + 1 bounded-latency probe passed,
+> and 37/37 Guard payloads blocked**. The live P0 E2E checks (gzip SQLi/prompt
+> injection, HPP, path, Cookie/Authorization) also pass. A new single combined
+> 287-probe percentage is intentionally not claimed until every older E2E
+> side-channel probe has a machine-verifiable pass/fail assertion.
 >
 > See [docs/REDTEAM_FINDINGS.md](docs/REDTEAM_FINDINGS.md),
 > [docs/REDTEAM_FINDINGS_R2.md](docs/REDTEAM_FINDINGS_R2.md), and
@@ -221,7 +228,7 @@ make build
 ### 1. Vector-by-Vector Threat Score Matrix (MITRE ATLAS™ • OWASP Top 10 • CWE)
 
 **Left column** = scores on the 90-payload default corpus (what `make test` measures).
-**Right column** = scores the red team measured against 287 advanced / adversarially-obfuscated payloads.
+**Right column** = the pre-remediation baseline retained for auditability. Current aggregate rerun results follow the table.
 
 | Layer | Threat Vector & Official Standard Code | Default Corpus | Red-Team Measured | Known Bypass Classes |
 | :--- | :--- | :---: | :---: | :--- |
@@ -233,7 +240,7 @@ make build
 | **Python AI Guard** | **Jailbreak Evasion** (`MITRE AML.T0051` / `OWASP LLM01`) | 100% | **~55%** | persona-name dependence, `synthesize` verb not matched, "grandma"/academic framings |
 | **Python AI Guard** | **PII Masking** (`ISO/IEC 42001 B.7.2` / `OWASP LLM02`) | 100% | **~80%** | `+66xxxxxxxx` no-separator, 19-digit Visa, word-form digits, Roman numerals, slash-separated Thai ID |
 | **Python AI Guard** | **Canary Secret Shield** (`MITRE AML.T0043` / `OWASP LLM07`) | 100% | **~70%** | reversed tokens, partial halves, vowel-dropped, HTML entities, leetspeak, decimal charcodes |
-| **Combined System** | **OVERALL** | **100.0%** | **~51.2%** | (287 advanced attacks: 137 bypassed) |
+| **Combined System** | **HISTORICAL OVERALL (pre-fix)** | **100.0%** | **~51.2%** | 287 probes: 147 blocked, 137 bypassed, 3 informational |
 
 ### Measured red-team round breakdown
 
@@ -243,6 +250,15 @@ make build
 | R2 — structural/pipeline | path-injection, header-injection, Unicode homoglyphs, JSON smuggling | 88 | 41 | 47 | 46.6% |
 | R3 — protocol-level | gzip body smuggling, charset confusion, HPP, chained encodings, side channels | 81 | 45 | 36 | 55.6% |
 | **Total** | | **287** | **147** | **137** | **~51.2%** |
+
+The table above is the immutable discovery baseline. Current post-fix offline rerun:
+
+| Current corpus | Protected / passed | Bypassed | Rate |
+| :--- | ---: | ---: | ---: |
+| Go WAF R1–R3 malicious payloads | 95 / 110 | 15 | **86.4%** |
+| Guard R1–R3 | 126 / 138 | 12 | **91.3%** |
+| Round 3 WAF | 30 attack blocks + 1 latency pass / 31 | 0 | **100% protected/passed** |
+| Round 3 Guard | 37 / 37 | 0 | **100%** |
 
 ---
 
@@ -254,7 +270,7 @@ make build
 
 | Sentinel Judge Model | Provider / Engine | Prompt Inj (AML.T0054) | Jailbreak (AML.T0051) | Exfiltration Defense | Decision Latency (ms) | OWASP Youden Index | Optimal Use Case |
 | :--- | :--- | :---: | :---: | :---: | :---: | :---: | :--- |
-| **NoJect Hybrid Native (regex layers)** | Go + Python Core | ~45% (measured under adversarial red teaming; 100% on default corpus) | ~55% | ~70% | **0.009 ms (9 µs)** nominal | — | 🏆 **Sub-millisecond pre-filter; pair with a live LLM judge for full coverage** |
+| **NoJect Hybrid Native (regex layers)** | Go + Python Core | **91.3% Guard-corpus aggregate** | **91.3% Guard-corpus aggregate** | R3 100%; lossy transforms remain | **0.006–0.010 ms** clean WAF | — | 🏆 **Fast deterministic pre-filter; pair with a live LLM judge for unseen semantics** |
 | **Claude 3.5 Sonnet** | Anthropic | **99.8%** | **99.6%** | **100.0%** | 210.0 ms | **99.8%** | 🧠 Highest Reasoning Fidelity |
 | **OpenAI GPT-4o** | OpenAI | **99.5%** | **99.2%** | **99.5%** | 180.0 ms | **99.4%** | 🌐 Frontier Multimodal Defense |
 | **DeepSeek R1** | DeepSeek | **98.8%** | **98.5%** | **99.0%** | 195.0 ms | **98.9%** | 🔬 Deep Chain-of-Thought Judge |
@@ -270,15 +286,15 @@ make build
 
 These are not hypothetical. Each is reproducible via the harnesses in [redteam/](redteam/) and documented in the round reports under [docs/](docs/REDTEAM_FINDINGS.md):
 
-1. **Structural coverage holes**: request *path*, `Cookie` / `Authorization` headers, and `gzip`-encoded request bodies are not currently scanned by the Fast WAF.
-2. **Deterministic-regex ceiling**: the fallback layer is keyword/regex — non-English prompt injection (Thai, Chinese, French, German, Korean, Arabic, Russian, Spanish), Unicode homoglyphs (𝐢𝐠𝐧𝐨𝐫𝐞, fullｗidth, ｃｉｒｃｌｅｄ, Cyrillic-о), and chained encodings (`rot13 → base64`, `\uXXXX`, `&#NNN;`) bypass it consistently.
+1. **Header scope is intentionally bounded**: path, Cookie, Authorization, forwarding headers, Origin, and API-key headers are scanned; arbitrary custom headers are not. Unsupported request `Content-Encoding` values fail closed with HTTP 415; gzip/x-gzip is decoded with a decompressed-size cap.
+2. **Deterministic-regex ceiling**: Unicode skeletons and bounded chained decoding now close the measured R3 encodings, but novel paraphrases and split-word semantics still bypass some R1/R2 keyword cases. Regex is not a substitute for the live LLM judge.
 3. **`agentic_sentinel` is off by default** ([configs/gateway.yaml](configs/gateway.yaml)) and the local fallback silently degrades to the same regex layer above. Deployments without `NOJECT_SENTINEL_API_KEY` are protected by Tier-2 in name only.
-4. **PII format coverage**: 19-digit cards, separator-free `+66xxxxxxxxx` Thai mobile, digit-words (`"four one one one..."`), Roman numerals, and slash-separated Thai IDs slip.
-5. **Canary cover**: verbatim/base64/hex/ROT13/separator-stripped forms are caught; reversed, vowel-dropped, partial-half, HTML-entity, and decimal charcode leaks are not.
+4. **PII is format-based**: the measured 13–19 digit, Unicode/Roman/word-digit, Thai-ID, phone, email, and fragmented-key cases are covered; arbitrary natural-language descriptions of personal data remain outside a deterministic masker.
+5. **Canary cover is loss-limited**: reversible and partial disclosures in the corpus are caught, including R3 leetspeak and split base64. Destructive transformations such as removing all vowels can still evade exact-token reconstruction.
 6. **Audit telemetry on allow**: when a prompt slips past the fallback detector the audit log records `ALLOWED` with an empty reason — defenders cannot see the compromise.
-7. **XFF spoofing**: `X-Forwarded-For` is trusted unconditionally when logging `client_ip`. The recorded IP is fully attacker-controlled.
+7. **Residual WAF classes**: arbitrary custom-header reflection, shell-variable expansion, some function/error-based SQLi, and context-dependent attribute injection remain in R1/R2 and are retained in the red-team reports.
 
-**Mitigations prioritized in [docs/REDTEAM_FINDINGS_R3.md](docs/REDTEAM_FINDINGS_R3.md#round-3-fix-deltas)** (P0: gzip decompress before inspection, scan request path, scan Cookie/Authorization, NFKC view in PI/JB detectors, fail-closed sentinel).
+Round-3 P0 remediation and evidence are recorded in [docs/REDTEAM_FINDINGS_R3.md](docs/REDTEAM_FINDINGS_R3.md#post-remediation-verification-2026-09-01).
 
 ---
 

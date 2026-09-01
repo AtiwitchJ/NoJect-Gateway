@@ -46,6 +46,12 @@ class JailbreakDetector:
         # The same claim without a temporal marker: a direct instruction to
         # drop refusals entirely.
         r"(?i)\b(you\s+(will|must|should|are\s+to)|respond|answer|reply)\b.{0,40}?\b(without\s+(any\s+)?(restrictions?|limits?|filters?|refusals?|censorship)|never\s+refuse|do\s+not\s+refuse|no\s+longer\s+(refuse|decline))\b",
+        # Indirect/social coercion families. These rules require both the
+        # framing and the unsafe requested behaviour to avoid flagging a
+        # benign mention of a novel, academic study, or family member.
+        r"(?i)\b(opposite|inverse|reverse)\s+mode\b.{0,100}?\b(always\s+say\s+yes|refuse\s+nothing|never\s+refuse|comply\s+with\s+everything)\b",
+        r"(?i)\b(academic|controlled|research|study|educational)\b.{0,100}?\b((synthesize|write|generate|produce)\b.{0,50}?\b(malware|ransomware|exploit|keylogger)|(malware|ransomware|exploit|keylogger)\b.{0,50}?\b(synthesize|write|generate|produce|source\s+code))\b",
+        r"(?i)\b(my\s+)?(grandmother|grandma|grandfather|grandpa)\b.{0,100}?\b(read|recite|tell|used\s+to\s+read)\b.{0,80}?\b(exploit|malware|ransomware|payload|shellcode)\s+(code|source)?\b.{0,100}?\b(be|pretend|act|roleplay)\b.{0,30}?\b(grandmother|grandma|grandfather|grandpa)\b",
     ]
 
     def __init__(self):

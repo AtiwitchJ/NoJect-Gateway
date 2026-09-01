@@ -56,6 +56,14 @@ func TestBenignQueryStrings(t *testing.T) {
 	}
 }
 
+func TestBenignHPPValueConcatenation(t *testing.T) {
+	e := NewEngine(DefaultConfig())
+	res := e.Inspect(http.MethodGet, "/api/search", "group=union&operation=select", http.Header{}, nil)
+	if res.Blocked {
+		t.Fatalf("benign independent parameters were blocked: rule=%s reason=%s", res.MatchedRule, res.Reason)
+	}
+}
+
 func TestBenignRequestBodies(t *testing.T) {
 	e := NewEngine(DefaultConfig())
 	cases := []struct{ name, body string }{

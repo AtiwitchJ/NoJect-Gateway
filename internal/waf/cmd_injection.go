@@ -2,6 +2,7 @@ package waf
 
 import (
 	"regexp"
+	"strings"
 )
 
 var (
@@ -73,6 +74,9 @@ func checkCommandInjectionStrict(input string) *WAFResult {
 	if len(input) == 0 {
 		return nil
 	}
+	if !strings.ContainsAny(input, ";|&\r\n") {
+		return nil
+	}
 	if match := cmdSeparatorThenCommand.FindString(input); match != "" {
 		return &WAFResult{
 			Blocked:       true,
@@ -88,6 +92,18 @@ func checkCommandInjectionStrict(input string) *WAFResult {
 
 func checkCommandInjection(input string) *WAFResult {
 	if len(input) == 0 {
+		return nil
+	}
+	if !strings.ContainsAny(input, "$`;|&\r\n?*[\\/-") {
+		return nil
+	}
+	if !strings.ContainsAny(input, "$`;|&\r\n?*[") &&
+		!containsASCIIFold(input, "/bin/") &&
+		!containsASCIIFold(input, "/usr/") &&
+		!containsASCIIFold(input, "/etc/") &&
+		!containsASCIIFold(input, "c:\\windows") &&
+		!containsASCIIFold(input, "-exec") &&
+		!containsASCIIFold(input, "base64") {
 		return nil
 	}
 
@@ -173,6 +189,9 @@ func checkCommandInjection(input string) *WAFResult {
 
 func checkPathTraversal(input string) *WAFResult {
 	if len(input) == 0 {
+		return nil
+	}
+	if !strings.Contains(input, "..") {
 		return nil
 	}
 

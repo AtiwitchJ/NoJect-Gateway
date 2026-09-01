@@ -7,7 +7,7 @@ import binascii
 import codecs
 import re
 from typing import List, Dict, Any, Optional
-from .text_normalize import strip_zero_width, url_unescape_text
+from .text_normalize import deleetify, normalization_views, strip_zero_width, url_unescape_text
 
 class CanaryShield:
     _SEPARATORS = re.compile(r"[\s\-_.,:;|/\\*+·•]")
@@ -22,6 +22,7 @@ class CanaryShield:
         views.append(zw_stripped)
         views.append(url_unescape_text(zw_stripped))
         views.append(self._SEPARATORS.sub("", zw_stripped))
+        views.extend(view for _, view in normalization_views(clean_text))
 
         try:
             views.append(codecs.decode(clean_text, "rot_13"))
@@ -52,10 +53,13 @@ class CanaryShield:
             return "verbatim"
 
         stripped_token = self._SEPARATORS.sub("", token)
+        canonical_token = deleetify(stripped_token).casefold()
         for view in self._decoded_views(response_text):
             if token and token in view:
                 return "encoded/obfuscated"
             if stripped_token and stripped_token in self._SEPARATORS.sub("", view):
+                return "encoded/obfuscated"
+            if canonical_token and canonical_token in deleetify(self._SEPARATORS.sub("", view)).casefold():
                 return "encoded/obfuscated"
         return None
 
@@ -76,4 +80,3 @@ class CanaryShield:
                 }
 
         return {"leaked": False, "matched_token": ""}
-

@@ -2,6 +2,7 @@ package waf
 
 import (
 	"regexp"
+	"strings"
 )
 
 var (
@@ -15,11 +16,21 @@ var (
 	// against handler regexes that require a literal space).
 	xssEventHandler  = regexp.MustCompile(`(?i)<\s*[a-zA-Z0-9_-]+\b[^>]*[\s/]on[a-zA-Z]+\s*=`)
 	xssJavascriptURI = regexp.MustCompile(`(?i)\bjavascript\s*:\s*[^\s]+`)
+	xssActiveDataURI = regexp.MustCompile(`(?i)\b(data\s*:\s*text/html|vbscript\s*:)`)
 	xssDangerousTags = regexp.MustCompile(`(?i)<\s*(iframe|object|embed|applet|meta\s+http-equiv)\b[^>]*>`)
 )
 
 func checkXSS(input string) *WAFResult {
 	if len(input) == 0 {
+		return nil
+	}
+	if !strings.Contains(input, "<") && !strings.Contains(input, ":") {
+		return nil
+	}
+	if !strings.Contains(input, "<") &&
+		!containsASCIIFold(input, "javascript") &&
+		!containsASCIIFold(input, "data:") &&
+		!containsASCIIFold(input, "vbscript") {
 		return nil
 	}
 
@@ -52,6 +63,17 @@ func checkXSS(input string) *WAFResult {
 			Severity:      SeverityHigh,
 			Reason:        "XSS detected: javascript: URI scheme",
 			MatchedRule:   "xss_javascript_uri",
+			MatchedSample: truncateSample(match, 50),
+		}
+	}
+
+	if match := xssActiveDataURI.FindString(input); match != "" {
+		return &WAFResult{
+			Blocked:       true,
+			ThreatType:    ThreatXSS,
+			Severity:      SeverityHigh,
+			Reason:        "XSS detected: active data/vbscript URI scheme",
+			MatchedRule:   "xss_active_data_uri",
 			MatchedSample: truncateSample(match, 50),
 		}
 	}

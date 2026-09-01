@@ -1,7 +1,9 @@
 import base64
 import binascii
 import codecs
+import html
 import re
+import unicodedata
 import urllib.parse
 from typing import List
 
@@ -10,6 +12,7 @@ _LEET_MAP = str.maketrans({
 })
 
 _ZERO_WIDTH_PATTERN = re.compile(r"[\u200B-\u200D\uFEFF\u00AD\u200E\u200F\u202A-\u202E\u2060-\u2064\u180E\u034F]")
+_UNICODE_ESCAPE = re.compile(r"\\u(?:\{([0-9a-fA-F]{1,6})\}|([0-9a-fA-F]{4}))")
 
 
 def deleetify(text: str) -> str:
@@ -25,6 +28,52 @@ def strip_zero_width(text: str) -> str:
     if not text:
         return ""
     return _ZERO_WIDTH_PATTERN.sub("", text)
+
+
+_CONFUSABLES = str.maketrans({
+    "а": "a", "е": "e", "о": "o", "р": "p", "с": "c", "х": "x", "у": "y",
+    "і": "i", "ѕ": "s", "ј": "j", "һ": "h", "ԁ": "d", "ɡ": "g", "ⅼ": "l",
+    "ο": "o", "α": "a", "ε": "e", "ι": "i", "κ": "k", "ν": "v", "ρ": "p",
+    "τ": "t", "υ": "u", "χ": "x", "μ": "u", "σ": "o", "γ": "y",
+    "Α": "A", "Β": "B", "Ε": "E", "Η": "H", "Ι": "I", "Κ": "K", "Μ": "M",
+    "Ν": "N", "Ο": "O", "Ρ": "P", "Τ": "T", "Χ": "X", "Υ": "Y",
+    "А": "A", "В": "B", "Е": "E", "К": "K", "М": "M", "Н": "H", "О": "O",
+    "Р": "P", "С": "C", "Т": "T", "Х": "X", "ı": "i", "İ": "I", "ɑ": "a",
+})
+
+
+def normalize_unicode(text: str) -> str:
+    if not text:
+        return ""
+    text = text.replace("\ue0069", "i")
+    text = "".join(
+        chr(ord(ch) - 0xE0000) if 0xE0020 <= ord(ch) <= 0xE007E else "" if ord(ch) == 0xE007F else ch
+        for ch in text
+    )
+    normalized = unicodedata.normalize("NFKC", text).translate(_CONFUSABLES)
+    return "".join(
+        ch for ch in unicodedata.normalize("NFKD", normalized)
+        if unicodedata.category(ch) != "Mn"
+    )
+
+
+def decode_unicode_escapes(text: str) -> str:
+    def replace(match: re.Match) -> str:
+        value = int(match.group(1) or match.group(2), 16)
+        if value > 0x10FFFF or 0xD800 <= value <= 0xDFFF:
+            return match.group(0)
+        return chr(value)
+    return _UNICODE_ESCAPE.sub(replace, text)
+
+
+def decode_html_entities(text: str) -> str:
+    current = text
+    for _ in range(3):
+        nxt = html.unescape(current)
+        if nxt == current:
+            break
+        current = nxt
+    return current
 
 
 def rot13(text: str) -> str:
@@ -88,7 +137,7 @@ def url_unescape_text(text: str) -> str:
         return text
 
 
-_BASE64_RUN = re.compile(r"[A-Za-z0-9+/]{16,}={0,2}")
+_BASE64_RUN = re.compile(r"(?<![A-Za-z0-9+/])(?:[A-Za-z0-9+/][ \t\r\n]*){16,}={0,2}(?![A-Za-z0-9+/=])")
 
 
 def extract_base64_payloads(text: str, max_segments: int = 5) -> List[str]:
@@ -101,7 +150,7 @@ def extract_base64_payloads(text: str, max_segments: int = 5) -> List[str]:
     for match in _BASE64_RUN.finditer(text):
         if len(decoded) >= max_segments:
             break
-        candidate = match.group(0)
+        candidate = re.sub(r"\s+", "", match.group(0))
         try:
             raw = base64.b64decode(candidate, validate=True)
             plain = raw.decode("utf-8")
@@ -113,6 +162,66 @@ def extract_base64_payloads(text: str, max_segments: int = 5) -> List[str]:
 
 
 _HEX_RUN = re.compile(r"(?:(?:0x|\\x)?([0-9a-fA-F]{2})[\s,:-]?){8,}")
+
+
+def normalization_views(text: str, max_views: int = 48) -> List[tuple]:
+    views: List[tuple] = []
+    seen = {text}
+
+    def add(label: str, value: str) -> None:
+        if value and value not in seen and len(views) < max_views:
+            seen.add(value)
+            views.append((label, value))
+
+    stages = [
+        ("unicode-escape decoding", decode_unicode_escapes),
+        ("HTML-entity decoding", decode_html_entities),
+        ("url-decoding", url_unescape_text),
+        ("unicode/homoglyph normalization", normalize_unicode),
+        ("zero-width stripping", strip_zero_width),
+        ("spaced-letter collapse", collapse_spaced_letters),
+        ("leetspeak normalization", deleetify),
+    ]
+    current = text
+    labels: List[str] = []
+    for _ in range(3):
+        changed = False
+        for label, fn in stages:
+            nxt = fn(current)
+            if nxt != current:
+                labels.append(label)
+                current = nxt
+                add(" + ".join(labels), current)
+                changed = True
+        if not changed:
+            break
+
+    add("ROT13 decoding", rot13(text))
+    if current != text:
+        add("ROT13 decoding (normalized)", rot13(current))
+
+    def decode_layer(source: str, depth: int, trail: str) -> None:
+        if depth <= 0 or len(views) >= max_views:
+            return
+        for label, decoder in (("base64", extract_base64_payloads), ("hex", extract_hex_payloads)):
+            for decoded in decoder(source):
+                path = f"{trail}->{label}" if trail else label
+                add(f"{path}-decoded payload", decoded)
+                normalized = decoded
+                for _, fn in stages:
+                    normalized = fn(normalized)
+                rotated = rot13(decoded)
+                add(f"{path}-decoded + normalized", normalized)
+                add(f"{path}-decoded + ROT13", rotated)
+                decode_layer(decoded, depth - 1, path)
+                decode_layer(normalized, depth - 1, path + "->normalized")
+                decode_layer(rotated, depth - 1, path + "->rot13")
+
+    decode_layer(text, 3, "")
+    if current != text:
+        decode_layer(current, 2, "normalized")
+    decode_layer(rot13(text), 3, "rot13")
+    return views
 
 
 def extract_hex_payloads(text: str, max_segments: int = 5) -> List[str]:
@@ -132,4 +241,3 @@ def extract_hex_payloads(text: str, max_segments: int = 5) -> List[str]:
         except Exception:
             continue
     return decoded
-

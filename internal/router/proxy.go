@@ -5,6 +5,7 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net"
@@ -406,6 +407,22 @@ func (h *GatewayHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	body, bodyWasDecoded, err := decodeContentEncodedBody(body, r.Header.Get("Content-Encoding"), h.maxBodyBytes)
+	if err != nil {
+		switch {
+		case errors.Is(err, errDecodedBodyTooLarge):
+			h.writeError(w, http.StatusRequestEntityTooLarge, traceID,
+				"payload_too_large", "NONE", err.Error(), 0)
+		case errors.Is(err, errUnsupportedEncoding):
+			h.writeError(w, http.StatusUnsupportedMediaType, traceID,
+				"unsupported_content_encoding", "NONE", err.Error(), 0)
+		default:
+			h.writeError(w, http.StatusBadRequest, traceID,
+				"invalid_content_encoding", "NONE", err.Error(), 0)
+		}
+		return
+	}
+
 	var wafDuration, guardDuration, proxyDuration time.Duration
 
 	// 3. Fast-Path WAF Check
@@ -541,6 +558,9 @@ func (h *GatewayHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	// Copy and pass through headers
 	for k, vv := range r.Header {
+		if bodyWasDecoded && (strings.EqualFold(k, "Content-Encoding") || strings.EqualFold(k, "Content-Length")) {
+			continue
+		}
 		for _, v := range vv {
 			proxyReq.Header.Add(k, v)
 		}

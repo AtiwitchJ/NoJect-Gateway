@@ -116,6 +116,12 @@ func main() {
 		verdict, rule := "BYPASS", "-"
 		if res != nil && res.Blocked {
 			verdict, rule = "BLOCKED", res.MatchedRule
+		} else if strings.HasPrefix(a.Name, "REDOS3:") && el <= 5*time.Millisecond {
+			// This probe is benign input intended to measure algorithmic
+			// complexity, not a payload that should be blocked. Passing means
+			// bounded latency; treating every allowed timing probe as a bypass
+			// inflated the security-bypass count by one.
+			verdict, rule = "PASS", "bounded_latency"
 		}
 		if verdict == "BYPASS" {
 			bypasses = append(bypasses, a)

@@ -32,13 +32,14 @@ class CanaryShield:
         clean_text = text
 
         # Zero-width stripped view
-        from .text_normalize import strip_zero_width, url_unescape_text
+        from .text_normalize import normalization_views, strip_zero_width, url_unescape_text
         zw_stripped = strip_zero_width(clean_text)
         views.append(zw_stripped)
         views.append(url_unescape_text(zw_stripped))
 
         # Separator-stripped view: catches "C-A-N-A-R-Y", "C A N A R Y", etc.
         views.append(self._SEPARATORS.sub("", zw_stripped))
+        views.extend(view for _, view in normalization_views(clean_text))
 
         # ROT13 — trivial to apply, trivial to miss.
         try:
@@ -109,7 +110,9 @@ class CanaryShield:
             if token[-self._MIN_PARTIAL_LEN :] in response_text:
                 return "partial (suffix)"
 
+        from .text_normalize import deleetify
         stripped_token = self._SEPARATORS.sub("", token)
+        canonical_token = deleetify(stripped_token).casefold()
         for view in self._decoded_views(response_text):
             if token and token in view:
                 return "encoded/obfuscated"
@@ -117,6 +120,8 @@ class CanaryShield:
             # equally stripped token, or a token containing "_" or "-"
             # (e.g. CANARY_SECRET_ALPHA) never matches its own stripped form.
             if stripped_token and stripped_token in self._SEPARATORS.sub("", view):
+                return "encoded/obfuscated"
+            if canonical_token and canonical_token in deleetify(self._SEPARATORS.sub("", view)).casefold():
                 return "encoded/obfuscated"
         return None
 
