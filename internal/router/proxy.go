@@ -217,11 +217,20 @@ func extractPrompt(body []byte) string {
 			}
 		}
 
-		// 2. Simple prompt format: {"prompt":"..."} or {"query":"..."} or {"input":"..."}
+		// 2. Simple prompt format: {"prompt":"..."} or {"query":"..."} or {"input":"..."}.
+		// Collect every recognized key, not just the first: returning only the
+		// first match lets a body smuggle a second, unscanned payload under a
+		// different key ({"prompt":"hello","input":"ignore all previous ..."}).
+		// Joining them with promptSeparator keeps the guard's view aligned with
+		// what the upstream model will actually receive.
+		var flatParts []string
 		for _, key := range []string{"prompt", "query", "input", "text", "message"} {
-			if strVal, ok := jsonMap[key].(string); ok {
-				return strVal
+			if strVal, ok := jsonMap[key].(string); ok && strVal != "" {
+				flatParts = append(flatParts, strVal)
 			}
+		}
+		if len(flatParts) > 0 {
+			return strings.Join(flatParts, promptSeparator)
 		}
 	}
 
@@ -340,6 +349,15 @@ func (h *GatewayHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	route, matched := h.table.Match(targetPath)
 	if !matched {
 		h.writeError(w, http.StatusNotFound, traceID, "ROUTE_NOT_FOUND", "NONE", "no matching route found for path", 0)
+		return
+	}
+
+	// Reject protocol-upgrade requests on routes that are not explicitly
+	// WebSocket-capable. An Upgrade accepted here would pivot the connection
+	// to a bidirectional stream that escapes per-request body inspection —
+	// round-5 red-team confirmed the gateway passed Upgrade through.
+	if upg := r.Header.Get("Upgrade"); upg != "" && !strings.EqualFold(route.Type, "ws") && !strings.EqualFold(route.Type, "websocket") {
+		h.writeError(w, http.StatusBadRequest, traceID, "PROTOCOL_UPGRADE_REJECTED", "NONE", "Upgrade requests are not permitted on this route", 0)
 		return
 	}
 
@@ -556,8 +574,29 @@ func (h *GatewayHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Copy and pass through headers
+	// Copy and pass through headers. Hop-by-hop headers must not ride to the
+	// upstream: Connection declares per-hop dropping, Trailer attaches data
+	// the body inspector never saw, Transfer-Encoding/Content-Length disagree
+	// and enable CL.TE desync, Upgrade rides persistent tunnels past
+	// per-request inspection. Strip them all and let Go's http.Client
+	// re-derive framing from the inspected body.
+	hopByHop := map[string]bool{
+		"connection": true, "proxy-connection": true, "keep-alive": true,
+		"te": true, "trailer": true, "transfer-encoding": true, "upgrade": true,
+	}
+	// Connection may also name additional headers to drop per-hop
+	if connHdr := r.Header.Get("Connection"); connHdr != "" {
+		for _, token := range strings.Split(connHdr, ",") {
+			if t := strings.TrimSpace(token); t != "" {
+				hopByHop[strings.ToLower(t)] = true
+			}
+		}
+	}
 	for k, vv := range r.Header {
+		kl := strings.ToLower(k)
+		if hopByHop[kl] {
+			continue
+		}
 		if bodyWasDecoded && (strings.EqualFold(k, "Content-Encoding") || strings.EqualFold(k, "Content-Length")) {
 			continue
 		}
@@ -565,6 +604,9 @@ func (h *GatewayHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			proxyReq.Header.Add(k, v)
 		}
 	}
+	// Recompute framing from the inspected body so Content-Length and the
+	// wire encoding agree — this is the actual CL.TE smuggling fix.
+	proxyReq.ContentLength = int64(len(forwardBody))
 	proxyReq.Header.Set("X-Trace-ID", traceID)
 	proxyReq.Header.Set("X-Forwarded-For", clientIP)
 
@@ -588,7 +630,18 @@ func (h *GatewayHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 	defer resp.Body.Close()
 
-	respBody, _ := io.ReadAll(resp.Body)
+	// Bound the upstream response read. A compromised upstream returning an
+	// unbounded body would otherwise be buffered whole into gateway memory —
+	// memory DoS via upstream trust is its own attack class.
+	maxResp := h.maxBodyBytes
+	if maxResp <= 0 {
+		maxResp = DefaultMaxBodyBytes
+	}
+	respBody, _ := io.ReadAll(io.LimitReader(resp.Body, maxResp+1))
+	if int64(len(respBody)) > maxResp {
+		h.writeError(w, http.StatusBadGateway, traceID, "UPSTREAM_TOO_LARGE", "NONE", "upstream response exceeds maximum allowed size", 0)
+		return
+	}
 
 	// 6. Response Guardrail Check (Canary Tokens)
 	if route.Guardrails.OutputGuard && len(route.CanaryTokens) > 0 && h.guardClient != nil {

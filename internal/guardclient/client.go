@@ -72,6 +72,7 @@ type Client struct {
 	baseURL        string
 	httpClient     *http.Client
 	fallbackAction string // "BLOCK" or "ALLOW"
+	sharedKey      string // X-NoJect-Guard-Key header for engine auth
 }
 
 // Config configures the Guard Client.
@@ -79,6 +80,10 @@ type Config struct {
 	Endpoint       string
 	Timeout        time.Duration
 	FallbackAction string
+	// SharedKey is the symmetric secret the gateway presents to the guard
+	// engine as X-NoJect-Guard-Key. If empty, no header is set — the engine
+	// only enforces the header when its own NOJECT_GUARD_SHARED_KEY is set.
+	SharedKey      string
 }
 
 // NewClient creates a new Guard Client.
@@ -96,6 +101,7 @@ func NewClient(cfg Config) *Client {
 			Timeout: cfg.Timeout,
 		},
 		fallbackAction: cfg.FallbackAction,
+		sharedKey:      cfg.SharedKey,
 	}
 }
 
@@ -111,6 +117,9 @@ func (c *Client) InspectRequest(ctx context.Context, payload InspectRequestPaylo
 		return nil, err
 	}
 	req.Header.Set("Content-Type", "application/json")
+	if c.sharedKey != "" {
+		req.Header.Set("X-NoJect-Guard-Key", c.sharedKey)
+	}
 
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
@@ -151,6 +160,9 @@ func (c *Client) InspectResponse(ctx context.Context, payload InspectOutputPaylo
 		return nil, err
 	}
 	req.Header.Set("Content-Type", "application/json")
+	if c.sharedKey != "" {
+		req.Header.Set("X-NoJect-Guard-Key", c.sharedKey)
+	}
 
 	resp, err := c.httpClient.Do(req)
 	if err != nil {

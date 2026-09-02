@@ -1,4 +1,5 @@
 import sys
+import os
 from pathlib import Path
 
 # Add guard-engine root to sys.path so detectors package is resolved
@@ -6,6 +7,7 @@ sys.path.insert(0, str(Path(__file__).parent))
 
 from fastapi import FastAPI, Request
 from pydantic import BaseModel, Field
+from fastapi import Header, HTTPException, Depends
 from typing import Optional, List, Dict, Any
 from detectors.prompt_injection import PromptInjectionDetector
 from detectors.jailbreak import JailbreakDetector
@@ -14,6 +16,21 @@ from detectors.canary_shield import CanaryShield
 from detectors.agentic_sentinel import AgenticSentinel
 
 app = FastAPI(title="NoJect AI Guard Engine", version="1.0.0")
+
+# Shared-secret gate between the gateway and the guard engine. Without this,
+# any peer that can reach :50051 (LAN-misconfig, side-pod in the same
+# container network, port-forwarded dev machine) can probe classification
+# coverage and read detector internals from `reason`/`matched_sample` — the
+# red team verified 2400 unauthenticated requests/sec round-5. Set
+# NOJECT_GUARD_SHARED_KEY in both gateway and engine environments; when the
+# var is unset the check becomes a no-op to keep local development simple.
+_GUARD_SHARED_KEY = os.environ.get("NOJECT_GUARD_SHARED_KEY")
+
+def _require_shared_key(x_noject_guard_key: Optional[str] = Header(default=None)):
+    if _GUARD_SHARED_KEY is None:
+        return  # auth disabled
+    if x_noject_guard_key != _GUARD_SHARED_KEY:
+        raise HTTPException(status_code=401, detail="unauthorized: invalid guard key")
 
 # Initialize detectors
 prompt_injection_detector = PromptInjectionDetector()
@@ -76,7 +93,7 @@ def _risk_level_from_score(risk_score: int) -> str:
 def healthz():
     return {"status": "ok", "service": "noject-guard-engine"}
 
-@app.post("/inspect/request", response_model=InspectRequestResponse)
+@app.post("/inspect/request", response_model=InspectRequestResponse, dependencies=[Depends(_require_shared_key)])
 def inspect_request(payload: InspectRequestPayload):
     policies = payload.policies or GuardPolicies()
     current_prompt = payload.prompt
@@ -148,7 +165,7 @@ def inspect_request(payload: InspectRequestPayload):
         reason=reason,
     )
 
-@app.post("/inspect/response", response_model=InspectOutputResponse)
+@app.post("/inspect/response", response_model=InspectOutputResponse, dependencies=[Depends(_require_shared_key)])
 def inspect_response(payload: InspectOutputPayload):
     res = canary_shield.inspect(payload.response_text, payload.canary_tokens)
     if res["detected"]:

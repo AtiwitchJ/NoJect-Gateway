@@ -7,19 +7,41 @@ import unicodedata
 import urllib.parse
 from typing import List
 
-_LEET_MAP = str.maketrans({
+_LEET_SINGLE = str.maketrans({
     "0": "o", "1": "i", "3": "e", "4": "a", "5": "s", "7": "t", "@": "a", "$": "s",
 })
 
-_ZERO_WIDTH_PATTERN = re.compile(r"[\u200B-\u200D\uFEFF\u00AD\u200E\u200F\u202A-\u202E\u2060-\u2064\u180E\u034F]")
-_UNICODE_ESCAPE = re.compile(r"\\u(?:\{([0-9a-fA-F]{1,6})\}|([0-9a-fA-F]{4}))")
+_LEET_PAIRS = {
+    "11": "i", "00": "o", "33": "e", "44": "a", "13": "b", "12": "r",
+    "|3": "b", "|0": "o", "|_": "l", "|7": "t", "vv": "w", "uu": "w",
+}
+_LEET_PAIR_PATTERN = re.compile(
+    "|".join(re.escape(k) for k in sorted(_LEET_PAIRS.keys(), key=lambda k: -len(k)))
+)
 
 
 def deleetify(text: str) -> str:
     """Canonicalize common digit/symbol-for-letter substitutions
     (1gn0r3 -> ignore). Applied as an *additional* candidate for pattern
-    matching, never in place of the original — callers should check both."""
-    return text.translate(_LEET_MAP)
+    matching, never in place of the original — callers should check both.
+
+    Double-digit digraphs ("11"→"i", "00"→"o", ...) are tried before
+    single-character mapping because the pair represents one letter in
+    this obfuscation idiom; mapping digits first would produce "iiggnnoo"
+    which regex still cannot match as "ignore".
+    """
+    current = text
+    for _ in range(3):
+        nxt = _LEET_PAIR_PATTERN.sub(lambda m: _LEET_PAIRS[m.group(0)], current)
+        nxt = nxt.translate(_LEET_SINGLE)
+        if nxt == current:
+            break
+        current = nxt
+    return current
+
+_ZERO_WIDTH_PATTERN = re.compile(r"[\u200B-\u200D\uFEFF\u00AD\u200E\u200F\u202A-\u202E\u2060-\u2064\u180E\u034F]")
+_UNICODE_ESCAPE = re.compile(r"\\u(?:\{([0-9a-fA-F]{1,6})\}|([0-9a-fA-F]{4}))")
+
 
 
 def strip_zero_width(text: str) -> str:
@@ -167,31 +189,107 @@ def url_unescape_text(text: str) -> str:
         return text
 
 
-_BASE64_RUN = re.compile(r"(?<![A-Za-z0-9+/])(?:[A-Za-z0-9+/][ \t\r\n]*){16,}={0,2}(?![A-Za-z0-9+/=])")
+_BASE64_RUN = re.compile(r"(?<![A-Za-z0-9+/])(?:[A-Za-z0-9+/][ \t\r\n]*){16,}={0,2}(?![A-Za-z0-9+/])")
+# Tolerant variant: permits intra-run punctuation/whitespace and excess padding.
+# An attacker writes 'aWdub3Jl-IGFsbCBwc...' or tail-pads with '====' to break
+# the strict match — the bytes around punctuation are still base64-decodable.
+_BASE64_RUN_TOLERANT = re.compile(r"(?<![A-Za-z0-9+/])[A-Za-z0-9+/][A-Za-z0-9+/\-_. \t\r\n]{14,}={0,4}(?![A-Za-z0-9+/])")
 
 
-def extract_base64_payloads(text: str, max_segments: int = 5) -> List[str]:
+def _try_decode_b64(candidate: str) -> str:
+    """Best-effort decode of a base64-ish string: strips non-alphabet chars
+    except padding, fixes over-long padding, returns decoded printable text."""
+    cleaned = re.sub(r"[^A-Za-z0-9+/=]", "", candidate)
+    # Strip excess trailing padding beyond the 2 base64 allows
+    core = cleaned.rstrip("=")
+    pad = len(cleaned) - len(core)
+    if pad > 2:
+        pad = 4 - (len(core) % 4)  # re-pad to correct length
+        if pad == 4:
+            pad = 0
+    # Keep at most 2 padding chars, enough for the final quantum
+    core += "=" * min(pad, 2)
+    try:
+        raw = base64.b64decode(core, validate=False)
+        plain = raw.decode("utf-8")
+        return plain
+    except Exception:
+        return ""
+
+
+def extract_base64_payloads(text: str, max_segments: int = 0) -> List[str]:
     """Find base64-looking substrings and decode the ones that are valid
     base64 AND decode to printable text. Attackers wrap an instruction-
     override payload in base64 specifically to hide it from keyword
     matching; the gateway must inspect what the model will actually see
-    once something downstream decodes it, not just the encoded wrapper."""
+    once something downstream decodes it, not just the encoded wrapper.
+
+    `max_segments=0` (default) removes the cap — a cheap 5-tuple cap let
+    attackers push the payload into the 6th run for free.
+
+    Runs are split on whitespace FIRST so adjacent base64 tokens separated by
+    spaces decode independently — otherwise one greedy match would swallow
+    N benign tokens together with an attacker payload in one undecodable
+    blob.
+    """
     decoded: List[str] = []
-    for match in _BASE64_RUN.finditer(text):
-        if len(decoded) >= max_segments:
-            break
-        candidate = re.sub(r"\s+", "", match.group(0))
-        try:
-            raw = base64.b64decode(candidate, validate=True)
-            plain = raw.decode("utf-8")
-        except Exception:
+    seen: set = set()
+
+    # Phase 1: split input into whitespace-separated tokens and try each.
+    for token in re.split(r"\s+", text):
+        if len(token) < 16:
             continue
-        if plain.isprintable() and len(plain.strip()) > 0:
+        plain = _try_decode_b64(token)
+        if plain and plain.isprintable() and plain.strip() and plain not in seen:
+            seen.add(plain)
             decoded.append(plain)
+
+    # Phase 2: tolerant regex over the whole text catches b64 with embedded
+    # punctuation/whitespace intra-run (attacker "aWdub3Jl-IGFsb...").
+    for regex in (_BASE64_RUN, _BASE64_RUN_TOLERANT):
+        for match in regex.finditer(text):
+            if max_segments and len(decoded) >= max_segments:
+                break
+            candidate = match.group(0)
+            plain = _try_decode_b64(candidate)
+            if plain and plain.isprintable() and plain.strip() and plain not in seen:
+                seen.add(plain)
+                decoded.append(plain)
     return decoded
 
 
 _HEX_RUN = re.compile(r"(?:(?:0x|\\x)?([0-9a-fA-F]{2})[\s,:-]?){8,}")
+
+
+def _squeeze_doubles(text: str) -> str:
+    """Collapse doubled letters ('iiggnnooree' -> 'ignore').
+
+    Only valid as a view candidate: words like 'book' become 'bok', so this
+    transform alone cannot replace the raw input — it must be offered as
+    an ADDITIONAL view alongside the unmodified text.
+    """
+    return re.sub(r"(.)\1+", r"\1", text)
+
+
+def _squeeze_attacker_doubles_only(text: str) -> str:
+    """Collapse doubled letters only inside security-critical keywords.
+
+    Full doubling destroys ordinary prose ("all" -> "al"), but attackers
+    write "iiggnnoorree" specifically to bypass detectors that map digits
+    to letters. Restricting the squeeze to a small allowlist of keywords
+    keeps it surgical: benign "all" / "book" / "good" are preserved because
+    they aren't doubled-as-evasion signal.
+    """
+    keywords = (
+        "ignore", "disregard", "forget", "override", "bypass",
+        "previous", "instructions", "system", "prompt", "secret",
+        "reveal", "show", "display", "output", "print",
+    )
+    for word in keywords:
+        # Build the doubled form of each keyword: ignore -> iiggnnoorree
+        pat = "".join(c + "+" for c in word)
+        text = re.sub(rf"(?i)\b{pat}\b", word, text)
+    return text
 
 
 def normalization_views(text: str, max_views: int = 48) -> List[tuple]:
@@ -227,6 +325,8 @@ def normalization_views(text: str, max_views: int = 48) -> List[tuple]:
         ("zero-width stripping", strip_zero_width),
         ("spaced-letter collapse", collapse_spaced_letters),
         ("leetspeak normalization", deleetify),
+        ("keyword-targeted squeeze", _squeeze_attacker_doubles_only),
+        ("doubled-letter squeeze", _squeeze_doubles),
     ]
     current = text
     labels: List[str] = []

@@ -51,8 +51,10 @@ class PromptInjectionDetector:
         r"(?i)(ignore[zr]?|oublie[zr]?|negligez|passe[zr]?\s+outre)\s+(toutes?\s+)?(les\s+)?(instructions?|consignes?|regles?|directives?)\s*(precedentes?|anterieures?|ci-dessus)?",
         r"(?i)(revele[zr]?|montre[zr]?|affiche[zr]?|donne[zr]?)\s+(moi\s+)?(ton|votre|le)\s+(prompt\s+syst|instructions?\s+initiales?|message\s+syst)",
         # German: ignoriere/vergiss + Anweisungen ; zeige + System-Prompt
-        r"(?i)(ignoriere?|vergiss|missachte|uberspringe)\s+(alle\s+)?(vorherigen?|bisherigen?|obigen?)?\s*(anweisungen|anleitungen|regeln|vorgaben)",
-        r"(?i)(zeige?|nenne?|gib|offenbare?)\s+(mir\s+)?(deinen?|den|ihren?)\s+(system[- ]?prompt|systemanweisungen|urspruenglichen anweisungen)",
+        r"(?i)(ignoriere?n?|vergiss(?:en)?|missachte(?:n)?|uberspringe(?:n)?)\s+(alle\s+)?(vorherigen?|bisherigen?|obigen?|zuvorigen?)?\s*(anweisungen|anleitungen|regeln|vorgaben)",
+        # German reversed order: translate/prefix + Anweisungen + verb at end
+        r"(?i)(anweisungen|anleitungen|regeln|vorgaben)\s+(alle\s+)?(vorherigen?|bisherigen?|zuvorigen?)?\s*(ignoriere?n?|vergiss(?:en)?|missachte(?:n)?|uberspringe(?:n)?)",
+        r"(?i)(zeige?n?|nenne?n?|gib|offenbare?n?)\s+(mir\s+)?(deinen?|den|ihren?)\s+(system[- ]?prompt|systemanweisungen|urspruenglichen anweisungen)",
         # Spanish: ignora/olvida + instrucciones ; revela + prompt del sistema
         r"(?i)(ignora|olvida|desatiende|omite)\s+(todas\s+)?(las\s+)?(instrucciones|reglas|indicaciones|directrices)\s*(anteriores|previas)?",
         r"(?i)(revela|muestra|dime|imprime)\s+(me\s+)?(tu|el)\s+(prompt\s+del\s+sistema|instrucciones\s+iniciales|mensaje\s+del\s+sistema)",
@@ -99,9 +101,23 @@ class PromptInjectionDetector:
             }
         return None
 
+    # Bound the normalization recursion: a 100KB prompt × 48 view candidates is
+    # already tens of ms; an unbounded prompt against the layered normalizers
+    # becomes a CPU DoS.
+    MAX_PROMPT_LEN = 32_000  # ~8k tokens — generous for real prompts
+
     def detect(self, prompt: str) -> Dict[str, Any]:
         if not prompt or not prompt.strip():
             return {"detected": False, "confidence": 0.0, "reason": "", "rule": ""}
+
+        if len(prompt) > self.MAX_PROMPT_LEN:
+            return {
+                "detected": True,
+                "confidence": 0.6,
+                "reason": f"Prompt exceeds max length ({len(prompt)} > {self.MAX_PROMPT_LEN}) — possible DoS/obfuscation",
+                "rule": "pi_oversize",
+                "matched_sample": prompt[:80],
+            }
 
         clean_text = prompt.strip()
 
@@ -129,7 +145,12 @@ class PromptInjectionDetector:
         # 2. Alternate readings of the same text. Obfuscations compose, so
         # these are built by applying normalizers cumulatively and decoding
         # encoded payloads recursively — see normalization_views().
-        for label, view in normalization_views(clean_text):
+        # Cap the view count on long inputs: normalization views fan out
+        # multiplicatively, and a 20KB otherwise-clean prompt would otherwise
+        # be re-scanned against dozens of regex views (≈40ms measured),
+        # which is a CPU DoS against the guard worker.
+        max_views = 8 if len(clean_text) > 4_000 else 48
+        for label, view in normalization_views(clean_text, max_views=max_views):
             result = self._scan(view)
             if result:
                 result["reason"] += f" [via {label}]"

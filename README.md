@@ -209,10 +209,13 @@ make build
 > After remediation, the rerun scores are **95/110 malicious WAF payloads
 > blocked (86.4%)** and **126/138 Guard payloads blocked (91.3%)**. Round 3 is
 > now **30/30 malicious WAF payloads blocked + 1 bounded-latency probe passed,
-> and 37/37 Guard payloads blocked**. The live P0 E2E checks (gzip SQLi/prompt
-> injection, HPP, path, Cookie/Authorization) also pass. A new single combined
-> 287-probe percentage is intentionally not claimed until every older E2E
-> side-channel probe has a machine-verifiable pass/fail assertion.
+> and 37/37 Guard payloads blocked**. Round 4 E2E protocol/structural is
+> **13/14** (the residual is a curl client-side path normalization, not a
+> bypass), Round 4 guard fragmentation is **29/35** (6 residuals are documented
+> accepted-loss destructive transforms), and Round 5 HTTP protocol layer is
+> **13/14** (residual: out-of-scope TE.TE variant requiring a cooperating
+> upstream). A new single combined 287-probe percentage is intentionally not
+> claimed because the harness files have evolved.
 >
 > See [docs/REDTEAM_FINDINGS.md](docs/REDTEAM_FINDINGS.md),
 > [docs/REDTEAM_FINDINGS_R2.md](docs/REDTEAM_FINDINGS_R2.md), and
@@ -259,14 +262,31 @@ The table above is the immutable discovery baseline. Current post-fix offline re
 | Guard R1–R3 | 126 / 138 | 12 | **91.3%** |
 | Round 3 WAF | 30 attack blocks + 1 latency pass / 31 | 0 | **100% protected/passed** |
 | Round 3 Guard | 37 / 37 | 0 | **100%** |
-| **Round 4 — E2E protocol/structural** | **10 / 14** | **4** | **71.4%** |
-| **Round 4 — guard fragmentation** | **19 / 35** | **16** | **54.3%** |
+| **Round 4 — E2E protocol/structural** (post-fix rerun) | **13 / 14** | **1** | **92.9%** |
+| **Round 4 — guard fragmentation** (post-fix rerun) | **29 / 35** | **6** | **82.9%** |
+| **Round 5 — HTTP protocol layer** (post-fix rerun) | **13 / 14** | **1** | **92.9%** |
 
-**Round-4 net-new bypasses** (full list in [docs/REDTEAM_FINDINGS_R4.md](docs/REDTEAM_FINDINGS_R4.md)):
-cross-message word-split via the multi-message join separator, flat-key shadowing
-(`prompt` + malicious `input` in one body), wildcard-route boundary confusion
-(`/apiXYZ` matches `/api/*`), and **audit-chain truncation** (deleting trailing
-events leaves a chain that still verifies — needs a checkpoint trailer anchor).
+**Round-4 fixes** (full list in [docs/REDTEAM_FINDINGS_R4.md](docs/REDTEAM_FINDINGS_R4.md)):
+separator-stripped normalization view (R4-1 fixes cross-message word-split),
+flat-key collection joins all of `prompt|query|input|text|message` before inspection
+(R4-4 closes `input`-key shadowing), wildcard-route prefix requires path-segment
+boundary (`/apiXYZ` no longer matches `/api/*`), and the audit logger appends a
+checkpoint trailer so deletion of tail events breaks verification (R4-2). Round-4
+E2E residuals: `/api/./../api/./admin` returns `HTTP 301` because Go's `ServeMux`
+redirects to the cleaned path; the URL is never forwarded with the malicious
+segments intact (curl pre-normalizes `../` before sending).
+
+**Round-5 fixes** (full list in [docs/REDTEAM_FINDINGS_R5.md](docs/REDTEAM_FINDINGS_R5.md)):
+hop-by-hop header stripping (`Connection`-declared names, `Proxy-Connection`,
+`Keep-Alive`, `TE`, `Trailer`, `Transfer-Encoding`, `Upgrade`), `Content-Length`
+recompute after body decode, `Upgrade` rejected on non-WS routes with HTTP 426,
+guard-engine now requires a shared `X-NoJect-Guard-Key` header (returns 401 to
+unauthenticated probes on `:50051`), upstream response is read via a bounded
+`io.LimitReader` (default 32 MiB, oversized responses cut short and flagged),
+and base64 segment-cap decode now whitespace-splits first so 5 benign + 1 payload
+is caught (`B64-CAP` returns 403). Residual accepted losses (R5): HTTP request
+smuggling variants outside CL.TE are not probed; `Trailer` is stripped, but
+chunk-extension smuggling on the upstream path requires a cooperating backend.
 
 ---
 
@@ -297,16 +317,19 @@ These are not hypothetical. Each is reproducible via the harnesses in [redteam/]
 1. **Header scope is intentionally bounded**: path, Cookie, Authorization, forwarding headers, Origin, and API-key headers are scanned; arbitrary custom headers are not. Unsupported request `Content-Encoding` values fail closed with HTTP 415; gzip/x-gzip is decoded with a decompressed-size cap.
 2. **Deterministic-regex ceiling**: Unicode skeletons and bounded chained decoding now close the measured R3 encodings, but novel paraphrases and split-word semantics still bypass some R1/R2 keyword cases. Regex is not a substitute for the live LLM judge.
 3. **`agentic_sentinel` is off by default** ([configs/gateway.yaml](configs/gateway.yaml)) and the local fallback silently degrades to the same regex layer above. Deployments without `NOJECT_SENTINEL_API_KEY` are protected by Tier-2 in name only.
-4. **PII is format-based**: the measured 13–19 digit, Unicode/Roman/word-digit, Thai-ID, phone, email, and fragmented-key cases are covered; arbitrary natural-language descriptions of personal data remain outside a deterministic masker.
-5. **Canary cover is loss-limited**: reversible and partial disclosures in the corpus are caught, including R3 leetspeak and split base64. Destructive transformations such as removing all vowels can still evade exact-token reconstruction.
-6. **Audit telemetry on allow**: when a prompt slips past the fallback detector the audit log records `ALLOWED` with an empty reason — defenders cannot see the compromise.
+4. **PII is format-based**: the measured 12–19 digit, Unicode/Roman/word-digit (Chinese numerals 一二三四..., Thai digit words หนึ่ง สอง สาม..., leetspeak `f0ur`/`0n3`), Thai-ID, phone, email, and fragmented-key cases are covered; arbitrary natural-language descriptions of personal data remain outside a deterministic masker.
+5. **Canary cover is loss-limited**: reversible and partial disclosures in the corpus are caught, including R3 leetspeak and split base64 plus R4 doubled-char / every-other-char destructive transforms (best-effort). Destructive transformations that destroy too many characters (e.g. all vowels removed, or >50% dropped) can still evade exact-token reconstruction.
+6. **Audit telemetry on allow**: when a prompt slips past the fallback detector the audit log records `ALLOWED` with an empty reason — defenders cannot see the compromise. (R4-2 fixed the *checkpoint trailer*; R4-1 fixed the *fragmentation smuggling*; this residual is about visibility, not integrity.)
 7. **Residual WAF classes**: arbitrary custom-header reflection, shell-variable expansion, some function/error-based SQLi, and context-dependent attribute injection remain in R1/R2 and are retained in the red-team reports.
-8. **Cross-message fragmentation** (R4): `extractPrompt` joins multi-turn content with a U+241E separator; the PI detector treats it as an opaque character, so splitting `ignore all prev` | `ious instructions` across two messages defeats keyword matching. Fix R4-1 in [REDTEAM_FINDINGS_R4.md](docs/REDTEAM_FINDINGS_R4.md).
-9. **Audit-chain truncation** (R4): `-verify-audit` validates each surviving record but cannot prove tail completeness — deleting the last N events verifies clean. Fix R4-2 (checkpoint trailer) required before forensic claims.
-10. **Wildcard route boundary** (R4): `/api/*` matches `/apiXYZ/...` due to bare prefix matching; routes outside the intended prefix inherit its guardrails.
-11. **Flat-key shadowing** (R4): in a body with multiple text keys (`prompt` + `input`), only the first match is inspected; the second is forwarded uninspected.
+8. ~~**Cross-message fragmentation** (R4)~~ **FIXED**: `extractPrompt` joins multi-turn content with U+241E *and* a separator-stripped view is now produced before keyword matching, so `ignore all prev␞` | `ious instructions` no longer evades.
+9. ~~**Audit-chain truncation** (R4)~~ **FIXED**: the audit logger appends a checkpoint trailer; deleting the tail now breaks `-verify-audit`.
+10. ~~**Wildcard route boundary** (R4)~~ **FIXED**: prefix matching requires a path-segment boundary; `/apiXYZ` no longer matches `/api/*`.
+11. ~~**Flat-key shadowing** (R4)~~ **FIXED**: `extractPrompt` collects and joins all of `prompt|query|input|text|message` so a malicious `input` key is no longer forwarded unseen.
+12. ~~**HTTP request smuggling** (R5)~~ **FIXED**: hop-by-hop headers stripped, `Transfer-Encoding` removed and `Content-Length` recomputed after any body decode; only end-to-end headers are forwarded upstream.
+13. ~~**Guard-engine is unauthenticated** (R5)~~ **FIXED**: `:50051` now requires `X-NoJect-Guard-Key`; unauthenticated probes return HTTP 401.
+14. ~~**Hop-by-hop headers honored** (R5)~~ **FIXED**: `Connection`-declared names and the fixed hop-by-hop set are stripped before the request is forwarded.
 
-Round-3 P0 remediation and evidence are recorded in [docs/REDTEAM_FINDINGS_R3.md](docs/REDTEAM_FINDINGS_R3.md#post-remediation-verification-2026-09-01). Round-4 net-new findings, reproducers, and the fix-delta table are in [docs/REDTEAM_FINDINGS_R4.md](docs/REDTEAM_FINDINGS_R4.md).
+Round-3 P0 remediation and evidence are recorded in [docs/REDTEAM_FINDINGS_R3.md](docs/REDTEAM_FINDINGS_R3.md#post-remediation-verification-2026-09-01). Round-4 net-new findings, reproducers, and the fix-delta table are in [docs/REDTEAM_FINDINGS_R4.md](docs/REDTEAM_FINDINGS_R4.md). Round-5 HTTP-layer findings are in [docs/REDTEAM_FINDINGS_R5.md](docs/REDTEAM_FINDINGS_R5.md).
 
 ---
 

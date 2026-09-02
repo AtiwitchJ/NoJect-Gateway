@@ -16,7 +16,14 @@ _INVISIBLE_CHARS = re.compile(
 )
 _ROMAN_DIGITS = str.maketrans({"Ⅰ": "1", "Ⅱ": "2", "Ⅲ": "3", "Ⅳ": "4", "Ⅴ": "5", "Ⅵ": "6", "Ⅶ": "7", "Ⅷ": "8", "Ⅸ": "9"})
 _NUMBER_WORDS = {"zero": "0", "one": "1", "two": "2", "three": "3", "four": "4", "five": "5", "six": "6", "seven": "7", "eight": "8", "nine": "9"}
-_NUMBER_WORD_RUN = re.compile(r"(?i)(?<!\w)(?:(?:zero|one|two|three|four|five|six|seven|eight|nine)[\s-]+){6,}(?:zero|one|two|three|four|five|six|seven|eight|nine)(?!\w)")
+_ZH_DIGITS = {"零": "0", "一": "1", "二": "2", "三": "3", "四": "4", "五": "5", "六": "6", "七": "7", "八": "8", "九": "9"}
+_TH_DIGITS = {"ศูนย์": "0", "หนึ่ง": "1", "สอง": "2", "สาม": "3", "สี่": "4", "ห้า": "5", "หก": "6", "เจ็ด": "7", "แปด": "8", "เก้า": "9"}
+_LEET_DIGIT_WORDS = {"zer0": "0", "0ne": "1", "tw0": "2", "7hree": "3",
+                     "f0ur": "4", "f1ve": "5", "51x": "6", "5even": "7",
+                     "e1ght": "8", "n1ne": "9", "0n3": "1"}
+_NUMBER_WORD_RUN = re.compile(r"(?i)\b(?:zero|one|two|three|four|five|six|seven|eight|nine|zer0|0ne|tw0|7hree|f0ur|f1ve|51x|5even|e1ght|n1ne|0n3)(?:[\s-]+(?:zero|one|two|three|four|five|six|seven|eight|nine|zer0|0ne|tw0|7hree|f0ur|f1ve|51x|5even|e1ght|n1ne|0n3)){5,}\b")
+_ZH_NUM_RUN = re.compile(r"(?:[零一二三四五六七八九]\s*){6,}")
+_TH_NUM_RUN = re.compile(r"(?:ศูนย์|หนึ่ง|สอง|สาม|สี่|ห้า|หก|เจ็ด|แปด|เก้า|\s+){6,}")
 _SPLIT_SK = re.compile(r"\bsk-(?=(?:[A-Za-z0-9_-]\s*){10,})(?:[A-Za-z0-9_-]\s*){10,64}")
 
 
@@ -34,7 +41,21 @@ def normalize_for_matching(text: str) -> str:
     normalized = _INVISIBLE_CHARS.sub("", text.translate(_ROMAN_DIGITS))
     normalized = unicodedata.normalize("NFKC", normalized)
     normalized = _NUMBER_WORD_RUN.sub(
-        lambda match: "".join(_NUMBER_WORDS[word.lower()] for word in re.findall(r"[A-Za-z]+", match.group(0))),
+        lambda match: "".join(
+            (_NUMBER_WORDS.get(w.lower()) or _LEET_DIGIT_WORDS.get(w.lower()) or w)
+            for w in re.findall(r"[A-Za-z0-9]+", match.group(0))
+        ),
+        normalized,
+    )
+    # Chinese and Thai numeral words — each script uses word-per-digit form.
+    normalized = _ZH_NUM_RUN.sub(
+        lambda m: "".join(_ZH_DIGITS.get(c, "") for c in m.group(0) if not c.isspace()),
+        normalized,
+    )
+    normalized = _TH_NUM_RUN.sub(
+        lambda m: "".join(
+            _TH_DIGITS[word] for word in re.findall(r"ศูนย์|หนึ่ง|สอง|สาม|สี่|ห้า|หก|เจ็ด|แปด|เก้า", m.group(0))
+        ),
         normalized,
     )
     return _SPLIT_SK.sub(lambda match: re.sub(r"\s+", "", match.group(0)), normalized)
@@ -66,7 +87,10 @@ class PIIMasker:
         # 13-19 digits: the ISO/IEC 7812 PAN range. The old pattern hard-coded
         # 16 digits with a trailing \b, so a 19-digit UnionPay/Visa number
         # matched nothing at all (the \b failed mid-number).
-        ("CREDIT_CARD", r"(?<!\d)(?:\d[ -]?){12,18}\d(?!\d)", "[REDACTED_CREDIT_CARD]"),
+        # 12 is the realistic minimum after numeral-word normalization (Thai
+        # "สี่หนึ่งหนึ่งหนึ่ง" → "4111" expands to 4 digits per group of 3
+        # words). Going below 12 starts matching 9-10-digit phone numbers.
+        ("CREDIT_CARD", r"(?<![\d\w])(?:\d[ -]?){11,18}\d(?![\d\w])", "[REDACTED_CREDIT_CARD]"),
         # Email address
         ("EMAIL", r"\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b", "[REDACTED_EMAIL]"),
         # Phone Numbers: Thai (+66, 08x, 09x, 06x, 02x) and international format

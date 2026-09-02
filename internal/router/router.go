@@ -60,7 +60,12 @@ func (t *Table) Match(reqPath string) (*Route, bool) {
 		cleaned := path.Clean(r.Path)
 		if strings.HasSuffix(cleaned, "/*") {
 			prefix := strings.TrimSuffix(cleaned, "/*")
-			if strings.HasPrefix(reqPath, prefix) {
+			// Require the matched remainder to start at a path-segment
+			// boundary. A bare HasPrefix matches "/apiXYZ" for "/api/*",
+			// inheriting a route's guardrails for a path outside its
+			// intended scope. Boundary check: prefix must be followed by
+			// either end-of-string or '/'.
+			if strings.HasPrefix(reqPath, prefix+"/") || reqPath == prefix {
 				routeCopy := r
 				return &routeCopy, true
 			}

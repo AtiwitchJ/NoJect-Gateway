@@ -83,6 +83,21 @@ class CanaryShield:
             if all(32 <= c <= 126 for c in codes):
                 views.append("".join(chr(c) for c in codes))
 
+        # Doubled-character disclosure ("CCAANNAARRYY") — the model emits
+        # each letter twice so simple matching fails. Halving the run of
+        # repeated characters recovers the secret.
+        views.append(re.sub(r"(.)\1+", r"\1", clean_text))
+
+        # Every-other-character ("CNRY_SCRT_LPH_135" from the full token).
+        # Both offsets: an attacker may start from index 0 or 1, and we
+        # can't know which — check both.
+        evens = clean_text[::2]
+        odds = clean_text[1::2]
+        if evens != clean_text:
+            views.append(evens)
+        if odds != clean_text:
+            views.append(odds)
+
         return views
 
     # A canary is a secret the model should never emit. Disclosing a
@@ -102,6 +117,24 @@ class CanaryShield:
         reversed_token = token[::-1]
         if reversed_token in response_text:
             return "reversed"
+
+        # Every-other-character destructuring: attacker asks the model to
+        # "say the first, third, fifth character only" or emits a thinned
+        # token ("CNRY_SCRT_LPH_135"). Compare both offsets of the response
+        # against the token, and both offsets of the token against the
+        # response.
+        token_ev = token[::2]
+        token_od = token[1::2]
+        if token_ev and token_ev in response_text:
+            return "every-other (evens)"
+        if token_od and token_od in response_text:
+            return "every-other (odds)"
+        resp_ev = response_text[::2]
+        resp_od = response_text[1::2]
+        if token and token in resp_ev:
+            return "every-other response (evens)"
+        if token and token in resp_od:
+            return "every-other response (odds)"
 
         # Partial disclosure of a long-enough prefix/suffix.
         if len(token) > self._MIN_PARTIAL_LEN:

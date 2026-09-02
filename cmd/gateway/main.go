@@ -136,7 +136,16 @@ func main() {
 		Endpoint:       cfg.GuardEngine.Endpoint,
 		Timeout:        time.Duration(cfg.GuardEngine.TimeoutMS) * time.Millisecond,
 		FallbackAction: cfg.GuardEngine.FallbackAction,
+		// Shared secret presented to the guard engine; must match the engine's
+		// NOJECT_GUARD_SHARED_KEY. When unset and the engine has no key either,
+		// auth is a no-op (local development).
+		SharedKey: os.Getenv("NOJECT_GUARD_SHARED_KEY"),
 	})
+	if os.Getenv("NOJECT_GUARD_SHARED_KEY") != "" {
+		log.Printf("[INFO] Guard engine shared-key auth: enabled")
+	} else {
+		log.Printf("[INFO] Guard engine shared-key auth: disabled (set NOJECT_GUARD_SHARED_KEY on both services to enable)")
+	}
 	log.Printf("[INFO] AI Guard Client connected to %s (Timeout: %dms)", cfg.GuardEngine.Endpoint, cfg.GuardEngine.TimeoutMS)
 
 	// 5. Initialize Route Table and Gateway Handler
